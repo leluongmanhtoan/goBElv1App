@@ -7,6 +7,7 @@ import (
 	server "program/api"
 	apiv1 "program/api/v1"
 	"program/internal/dbclient"
+	"program/middleware"
 	"program/repository"
 	"program/repository/db"
 	"program/service"
@@ -86,6 +87,7 @@ func main() {
 		SecretKey: os.Getenv("JWT_SECRET_KEY"),
 		Issuer:    os.Getenv("JWT_ISSUER")}
 
+	middleware.AuthMdw = middleware.NewAuthorMdw(auth)
 	//Init API collections
 	apiv1.NewUser(server.Engine, service.NewUser(passHandler, auth))
 

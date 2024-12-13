@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"program/repository"
 	"strings"
@@ -15,7 +16,7 @@ import (
 
 type IAuth interface {
 	GenerateToken(userId string, isRefeshToken bool) (string, error)
-	ValidateToken(token string, isRefreshToken bool) (*jwt.Token, error)
+	ValidateToken(token string, isRefreshToken bool) (*jwt.StandardClaims, error)
 	RevokeSession(accessToken, refreshToken string) error
 }
 
@@ -28,8 +29,10 @@ func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, erro
 	tokenID := uuid.NewString()
 	expireAt := time.Now().Unix()
 	if !isRefeshToken {
+		tokenID = "access@" + tokenID
 		expireAt = time.Now().Add(15 * time.Minute).Unix()
 	} else {
+		tokenID = "refresh@" + tokenID
 		expireAt = time.Now().AddDate(0, 0, 7).Unix()
 	}
 	claims := &jwt.StandardClaims{
@@ -38,7 +41,6 @@ func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, erro
 		IssuedAt:  time.Now().Unix(),
 		Issuer:    s.Issuer,
 		ExpiresAt: expireAt,
-		NotBefore: time.Now().Add(5 * time.Second).Unix(),
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token, err := t.SignedString([]byte(s.SecretKey))
@@ -55,7 +57,7 @@ func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, erro
 	return token, nil
 }
 
-func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.Token, error) {
+func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.StandardClaims, error) {
 	if !strings.HasPrefix(token, "Bearer ") && !isRefreshToken {
 		return nil, fmt.Errorf("not a Bearer authorization")
 	}
@@ -72,34 +74,38 @@ func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.Token, 
 	}
 	claims, ok := parsedToken.Claims.(*jwt.StandardClaims)
 	if !parsedToken.Valid {
-		return nil, fmt.Errorf("invalid claims")
+		return nil, errors.New("invalid claims")
 	}
 	if !ok {
-		return nil, fmt.Errorf("can't claims token")
+		return nil, errors.New("can not claims token")
 	}
-	if isRefreshToken {
-		isValidToken, err := repository.RedisClientConnection.IsMemberInSet("userId:"+claims.Subject+":tokenID_valid", claims.Id)
-		if !isValidToken || err != nil {
-			return nil, fmt.Errorf("refresh token is invalid")
+	tokenType := strings.Split(claims.Id, "@")
+	if !isRefreshToken {
+		if tokenType[0] != "access" {
+			return nil, errors.New("this is not access token")
+		}
+		isBannedToken, err := repository.RedisClientConnection.IsExisted("blacklist:accessToken:" + tokenString)
+		if isBannedToken || err != nil {
+			return nil, errors.New("access token is invalid")
 		}
 	} else {
-		isBannedToken, err := repository.RedisClientConnection.IsExisted("blacklist:accessToken:" + token)
-		if isBannedToken || err != nil {
-			return nil, fmt.Errorf("access token is invalid")
+		if tokenType[0] != "refresh" {
+			return nil, errors.New("this is not refresh token")
+		}
+		isValidToken, err := repository.RedisClientConnection.IsMemberInSet("userId:"+claims.Subject+":tokenID_valid", claims.Id)
+		if !isValidToken || err != nil {
+			return nil, errors.New("refresh token is invalid")
 		}
 	}
 	now := time.Now().Unix()
 	if claims.IssuedAt > now {
-		return nil, fmt.Errorf("token issued in the future")
-	}
-	if claims.NotBefore > now {
-		return nil, fmt.Errorf("token not yet valid")
+		return nil, errors.New("token issued in the future")
 	}
 	if claims.ExpiresAt < now {
-		return nil, fmt.Errorf("token expired")
+		return nil, errors.New("token expired")
 	}
 
-	return parsedToken, nil
+	return claims, nil
 }
 
 // Private check revoke token
@@ -117,10 +123,10 @@ func (s *JwtAuth) RevokeSession(accessToken, refreshToken string) error {
 	}
 	claims, ok := parsedToken.Claims.(*jwt.StandardClaims)
 	if !parsedToken.Valid {
-		return fmt.Errorf("invalid claims")
+		return errors.New("invalid claims")
 	}
 	if !ok {
-		return fmt.Errorf("can't claims token")
+		return errors.New("can not claims token")
 	}
 
 	_, err = repository.RedisClientConnection.SRem("userId:"+claims.Subject+":tokenID_valid", claims.Id)

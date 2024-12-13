@@ -27,10 +27,16 @@ func (m *AuthorMwd) RequestAuthorization() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
+			c.JSON(
+				http.StatusUnauthorized,
+				map[string]any{
+					"error": http.StatusText(http.StatusUnauthorized),
+				},
+			)
 			c.Abort()
 			return
 		}
-		_, err := m.authen.ValidateToken(authHeader, false)
+		tokenClaims, err := m.authen.ValidateToken(authHeader, false)
 		if err != nil {
 			c.JSON(
 				http.StatusUnauthorized,
@@ -41,5 +47,6 @@ func (m *AuthorMwd) RequestAuthorization() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		c.Set("user_id", tokenClaims.Subject)
 	}
 }
