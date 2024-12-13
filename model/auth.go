@@ -19,8 +19,8 @@ type User struct {
 
 type (
 	Login struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username string `json:"username" validate:"required"`
+		Password string `json:"password" validate:"required"`
 	}
 	LoginResponse struct {
 		UserID       string `json:"userID"`
@@ -32,12 +32,14 @@ type (
 
 type (
 	Register struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username string `json:"username" validate:"required"`
+		Password string `json:"password" validate:"required"`
 	}
 	RegisterResponse struct {
-		Message  string `json:"message"`
-		UserUuid string `json:"userUUID"`
+		Message      string `json:"message"`
+		UserUuid     string `json:"userUUID"`
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
 	}
 )
 
