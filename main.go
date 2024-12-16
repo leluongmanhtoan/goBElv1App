@@ -74,7 +74,8 @@ func init() {
 	}
 
 	//Init repository
-	repository.UserRepo = db.NewUser()
+	repository.UserRepo = db.NewUserRepo()
+	repository.RelationshipsRepo = db.NewRelationshipsRepo()
 
 }
 func main() {
@@ -89,8 +90,8 @@ func main() {
 
 	middleware.AuthMdw = middleware.NewAuthorMdw(auth)
 	//Init API collections
-	apiv1.NewUser(server.Engine, service.NewUser(passHandler, auth))
-
+	apiv1.NewUserAPI(server.Engine, service.NewUser(passHandler, auth))
+	apiv1.NewRelationshipsAPI(server.Engine, service.NewRelationships())
 	//Start http server
 	server.Start("8080")
 }

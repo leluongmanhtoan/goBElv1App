@@ -19,7 +19,7 @@ type UserProfile struct {
 	PhoneNumber   string    `json:"phone,omitempty" bun:"phoneNumber,type:varchar(20)"`
 	CreatedAt     time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
 	UpdatedAt     time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
-	UserAuth      *User     `json:"userAuth,omitempty" bun:"rel:has-one,join:userId=id"`
+	UserAuth      *User     `json:"userAuth,omitempty" bun:"rel:belongs-to,join:userId=id"`
 }
 
 type UserProfilePost struct {

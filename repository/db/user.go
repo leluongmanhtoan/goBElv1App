@@ -2,41 +2,39 @@ package db
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"program/model"
 	"program/repository"
-	"time"
 )
 
-func NewUser() repository.IUser {
+func NewUserRepo() repository.IUser {
 	return &User{}
 }
 
 type User struct{}
 
-func (r *User) DoesUserExist(ctx context.Context, username string) (exists bool, err error) {
-	exists, err = repository.SqlClientConnection.GetDB().NewSelect().
+func (r *User) DoesUserExist(ctx context.Context, username string) (bool, error) {
+	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
 		Model((*model.User)(nil)).
 		ColumnExpr("1").
 		Where("username = ?", username).
 		Exists(ctx)
 	if err != nil {
-		return
+		return false, fmt.Errorf("error checking user: %w", err)
 	}
-	return
+	return exists, nil
 }
 
-func (r *User) DoesUserProfileExist(ctx context.Context, userID string) (exists bool, err error) {
-	exists, err = repository.SqlClientConnection.GetDB().NewSelect().
+func (r *User) DoesUserProfileExist(ctx context.Context, userID string) (bool, error) {
+	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
 		Model((*model.UserProfile)(nil)).
 		ColumnExpr("1").
 		Where("userId = ?", userID).
 		Exists(ctx)
 	if err != nil {
-		return
+		return false, fmt.Errorf("error checking user profile: %w", err)
 	}
-	return
+	return exists, nil
 }
 
 func (r *User) GetByUserName(ctx context.Context, username string) (*model.User, error) {
@@ -52,25 +50,21 @@ func (r *User) GetByUserName(ctx context.Context, username string) (*model.User,
 }
 
 func (r *User) CreateUser(ctx context.Context, user *model.User) error {
-	res, err := repository.SqlClientConnection.GetDB().NewInsert().
+	_, err := repository.SqlClientConnection.GetDB().NewInsert().
 		Model(user).
 		Exec(ctx)
 	if err != nil {
 		return err
-	} else if affected, _ := res.RowsAffected(); affected != 1 {
-		return errors.New("insert new user failed")
 	}
 	return nil
 }
 
 func (r *User) CreateUserProfle(ctx context.Context, userProfile *model.UserProfile) error {
-	res, err := repository.SqlClientConnection.GetDB().NewInsert().
+	_, err := repository.SqlClientConnection.GetDB().NewInsert().
 		Model(userProfile).
 		Exec(ctx)
 	if err != nil {
 		return err
-	} else if affected, _ := res.RowsAffected(); affected != 1 {
-		return errors.New("insert new user profile failed")
 	}
 	return nil
 }
@@ -88,32 +82,13 @@ func (r *User) RetrieveProfileForUser(ctx context.Context, user_id string) (*mod
 	return profile, nil
 }
 
-func (r *User) UpdateProfileForUser(ctx context.Context, user_id string, profile *model.UserProfilePut) (*model.UserProfile, error) {
+func (r *User) UpdateProfileForUser(ctx context.Context, user_id string, fields map[string]any) (*model.UserProfile, error) {
 	query := repository.SqlClientConnection.GetDB().NewUpdate().
 		Model(&model.UserProfile{}).
 		Where("userId = ?", user_id)
-	if profile.FirstName != "" {
-		query.Set("firstname = ?", profile.FirstName)
+	for field, value := range fields {
+		query.Set(fmt.Sprintf("%s = ?", field), value)
 	}
-	if profile.LastName != "" {
-		query.Set("lastname = ?", profile.LastName)
-	}
-	if profile.Gender != nil {
-		query.Set("gender = ?", profile.Gender)
-	}
-	if profile.Avatar != "" {
-		query.Set("avatarUrl = ?", profile.Avatar)
-	}
-	if profile.Address != "" {
-		query.Set("address = ?", profile.Address)
-	}
-	if profile.Email != "" {
-		query.Set("email = ?", profile.Email)
-	}
-	if profile.PhoneNumber != "" {
-		query.Set("phoneNumber = ?", profile.PhoneNumber)
-	}
-	query.Set("updatedAt = ?", time.Now())
 	_, err := query.Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user profile: %v", err)

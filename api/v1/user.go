@@ -18,11 +18,11 @@ type User struct {
 }
 
 // Func create api collection
-func NewUser(r *gin.Engine, userSerivce service.IUser) {
+func NewUserAPI(engine *gin.Engine, userSerivce service.IUser) {
 	handler := &User{
 		userService: userSerivce,
 	}
-	Group := r.Group("api/v1")
+	Group := engine.Group("api/v1")
 	{
 		//Authen
 		Group.POST("auth/register", handler.Register)

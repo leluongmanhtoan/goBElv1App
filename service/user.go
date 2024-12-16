@@ -167,7 +167,33 @@ func (s *User) GetUserProfile(ctx context.Context, user_id string) (any, error) 
 }
 
 func (s *User) UpdateUserProfile(ctx context.Context, user_id string, profilePut *model.UserProfilePut) (any, error) {
-	profile, err := repository.UserRepo.UpdateProfileForUser(ctx, user_id, profilePut)
+	fields := make(map[string]interface{})
+	if profilePut.FirstName != "" {
+		fields["firstname"] = profilePut.FirstName
+	}
+	if profilePut.LastName != "" {
+		fields["lastname"] = profilePut.LastName
+	}
+	if profilePut.Gender != nil {
+		fields["gender"] = profilePut.Gender
+	}
+	if profilePut.Avatar != "" {
+		fields["avatarUrl"] = profilePut.Avatar
+	}
+	if profilePut.Address != "" {
+		fields["address"] = profilePut.Address
+	}
+	if profilePut.Email != "" {
+		fields["email"] = profilePut.Email
+	}
+	if profilePut.PhoneNumber != "" {
+		fields["phoneNumber"] = profilePut.PhoneNumber
+	}
+	fields["updatedAt"] = time.Now()
+	if len(fields) == 0 {
+		return nil, errors.New("no fields to update")
+	}
+	profile, err := repository.UserRepo.UpdateProfileForUser(ctx, user_id, fields)
 	if err != nil {
 		return nil, err
 	}
