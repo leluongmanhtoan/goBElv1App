@@ -76,6 +76,7 @@ func init() {
 	//Init repository
 	repository.UserRepo = db.NewUserRepo()
 	repository.RelationshipsRepo = db.NewRelationshipsRepo()
+	repository.NewsfeedRepo = db.NewNewsFeedRepo()
 
 }
 func main() {
@@ -92,6 +93,7 @@ func main() {
 	//Init API collections
 	apiv1.NewUserAPI(server.Engine, service.NewUser(passHandler, auth))
 	apiv1.NewRelationshipsAPI(server.Engine, service.NewRelationships())
+	apiv1.NewNewsFeedAPI(server.Engine, service.NewNewsFeed())
 	//Start http server
 	server.Start("8080")
 }

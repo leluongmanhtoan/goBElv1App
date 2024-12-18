@@ -15,6 +15,11 @@ type Follows struct {
 	IsMutual      bool      `json:"isMutual" bun:"isMutual,default:0"`
 	CreatedAt     time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
 	UpdatedAt     time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
-	//Follower      *User     `json:"follower,omitempty" bun:"rel:belongs-to,join:followerId=id"`
-	//Following     *User     `json:"following,omitempty" bun:"rel:belongs-to,join:followingId=id"`
+}
+
+type FollowerInfo struct {
+	ProfileId string `json:"profileId" bun:"profileId"`
+	FirstName string `json:"firstname" bun:"firstname"`
+	Lastname  string `json:"lastname" bun:"lastname"`
+	Avatar    string `json:"avatar" bun:"avatarUrl"`
 }

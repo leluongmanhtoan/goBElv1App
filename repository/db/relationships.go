@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"program/model"
@@ -13,6 +14,36 @@ type Relationships struct{}
 
 func NewRelationshipsRepo() repository.IRelationships {
 	return &Relationships{}
+}
+
+func (*Relationships) GetFollowList(ctx context.Context, limit, offset int, targetUserId string, isFollowingUser bool) (int, *[]model.FollowerInfo, error) {
+	//var followers []model.FollowerInfo
+	follow := new([]model.FollowerInfo)
+	query := repository.SqlClientConnection.GetDB().NewSelect().
+		Column("p.profileId", "p.firstname", "p.lastname", "p.avatarUrl").
+		TableExpr("follows as f")
+
+	if isFollowingUser {
+		query.Join("JOIN userProfile p ON p.userId = f.followerId")
+		query.Where("f.followingId = ?", targetUserId)
+	} else {
+		query.Join("JOIN userProfile p ON p.userId = f.followingId")
+		query.Where("f.followerId = ?", targetUserId)
+	}
+	query.Where("isActive = 1")
+
+	if limit > 0 {
+		query.Limit(limit).Offset(offset)
+	}
+	total, err := query.ScanAndCount(ctx, follow)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, follow, nil
+		}
+		return 0, nil, err
+	}
+	return total, follow, nil
+
 }
 
 func (r *Relationships) AddFollow(ctx context.Context, postFollow *model.Follows) error {
@@ -77,4 +108,28 @@ func (r *Relationships) UpdateMutualFollowStatus(ctx context.Context, followerId
 		return errors.New("can not update mutual status for following")
 	}
 	return nil
+}
+
+func (r *Relationships) NumOfFollowRelationship(ctx context.Context, targetUserId string) (int, int, error) {
+	var followerCount = 0
+	var followingCount = 0
+	err := repository.SqlClientConnection.GetDB().NewSelect().
+		Model((*model.Follows)(nil)).
+		Where("followingId = ?", targetUserId).
+		Where("isActive = 1").
+		ColumnExpr("COUNT(*)").
+		Scan(ctx, &followerCount)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	err = repository.SqlClientConnection.GetDB().NewSelect().
+		Model((*model.Follows)(nil)).
+		Where("followerId = ?", targetUserId).
+		ColumnExpr("COUNT(*)").
+		Scan(ctx, &followingCount)
+	if err != nil {
+		return 0, 0, err
+	}
+	return followerCount, followingCount, nil
 }

@@ -10,8 +10,10 @@ import (
 )
 
 type IRelationships interface {
-	FollowUser(ctx context.Context, followerId, followingId string) (any, error)
-	UnFollowUser(ctx context.Context, followerId, followingId string) (any, error)
+	GetFollowers(ctx context.Context, limit, offset int, userId string) (any, error)
+	GetFollowing(ctx context.Context, limit, offset int, userId string) (any, error)
+	GetFollowRelationshipCount(ctx context.Context, userId string) (any, error)
+	ToggleFollow(ctx context.Context, followerId, followingId string) (any, error)
 }
 
 type Relationships struct {
@@ -21,80 +23,109 @@ func NewRelationships() IRelationships {
 	return &Relationships{}
 }
 
-func (s *Relationships) FollowUser(ctx context.Context, followerId, followingId string) (any, error) {
+func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingId string) (any, error) {
+	var isActive = false
+	var message = ""
+	var isMutual = false
 	if followerId == followingId {
 		return nil, errors.New("can not follow yourself")
-	}
-	followRelationship := &model.Follows{
-		FollowerId:  followerId,
-		FollowingId: followingId,
-		IsActive:    true,
-		IsMutual:    false,
-		CreatedAt:   time.Now(),
 	}
 	exists, err := repository.RelationshipsRepo.IsFollowExists(ctx, followerId, followingId)
 	if err != nil {
 		return nil, err
 	}
+
 	if exists {
-		isActive, err := repository.RelationshipsRepo.IsActiveFollow(ctx, followerId, followingId)
+		isActive, err = repository.RelationshipsRepo.IsActiveFollow(ctx, followerId, followingId)
 		if err != nil {
 			return nil, err
 		}
-		if isActive == true {
-			return nil, fmt.Errorf("%s is followed", followingId)
-		}
-		err = repository.RelationshipsRepo.UpdateFollow(ctx, followerId, followingId, true)
-		if err != nil {
-			return nil, err
+		if !isActive {
+			err = repository.RelationshipsRepo.UpdateFollow(ctx, followerId, followingId, true)
+			if err != nil {
+				return nil, err
+			}
+			message = "refollow " + followingId + " successful"
+		} else {
+			err = repository.RelationshipsRepo.UpdateFollow(ctx, followerId, followingId, false)
+			if err != nil {
+				return nil, err
+			}
+
+			err = repository.RelationshipsRepo.UpdateMutualFollowStatus(ctx, followerId, followingId, false)
+			if err != nil {
+				return nil, err
+			}
+			message = "unfollow " + followingId + " successful"
 		}
 	} else {
+		followRelationship := &model.Follows{
+			FollowerId:  followerId,
+			FollowingId: followingId,
+			IsActive:    true,
+			IsMutual:    false,
+			CreatedAt:   time.Now(),
+		}
 		err := repository.RelationshipsRepo.AddFollow(ctx, followRelationship)
 		if err != nil {
 			return nil, err
 		}
+		message = "follow " + followingId + " successful"
 	}
-	isMutual, err := repository.RelationshipsRepo.IsActiveFollow(ctx, followerId, followingId)
-	if err != nil {
-		return nil, err
-	}
-	if isMutual {
-		err := repository.RelationshipsRepo.UpdateMutualFollowStatus(ctx, followerId, followingId, true)
+	if exists && !isActive || !exists {
+		isMutual, err = repository.RelationshipsRepo.IsActiveFollow(ctx, followingId, followerId)
 		if err != nil {
 			return nil, err
 		}
+		if isMutual {
+			err := repository.RelationshipsRepo.UpdateMutualFollowStatus(ctx, followerId, followingId, true)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	return &map[string]string{
-		"status":  "successful",
-		"message": followingId + " is followed ",
+	return &map[string]any{
+		"status":   "successful",
+		"message":  message,
+		"isMutual": isMutual,
 	}, nil
 }
 
-func (s *Relationships) UnFollowUser(ctx context.Context, followerId, followingId string) (any, error) {
-	exists, err := repository.RelationshipsRepo.IsFollowExists(ctx, followerId, followingId)
+func (s *Relationships) GetFollowers(ctx context.Context, limit, offset int, userId string) (any, error) {
+	total, followers, err := repository.RelationshipsRepo.GetFollowList(ctx, limit, offset, userId, true)
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
-		return nil, errors.New("not follow that user")
-	}
-	isActive, err := repository.RelationshipsRepo.IsActiveFollow(ctx, followerId, followingId)
+	fmt.Println(followers)
+	return &map[string]any{
+		"data":   followers,
+		"limit":  limit,
+		"offset": offset,
+		"total":  total,
+	}, nil
+}
+
+func (s *Relationships) GetFollowing(ctx context.Context, limit, offset int, userId string) (any, error) {
+	total, following, err := repository.RelationshipsRepo.GetFollowList(ctx, limit, offset, userId, false)
 	if err != nil {
 		return nil, err
 	}
-	if !isActive {
-		return nil, errors.New("that user is unfollowed")
-	}
-	err = repository.RelationshipsRepo.UpdateFollow(ctx, followerId, followingId, false)
+	fmt.Println(following)
+	return &map[string]any{
+		"data":   following,
+		"limit":  limit,
+		"offset": offset,
+		"total":  total,
+	}, nil
+}
+
+func (s *Relationships) GetFollowRelationshipCount(ctx context.Context, userId string) (any, error) {
+	totalFollower, totalFollowing, err := repository.RelationshipsRepo.NumOfFollowRelationship(ctx, userId)
 	if err != nil {
 		return nil, err
 	}
-	err = repository.RelationshipsRepo.UpdateMutualFollowStatus(ctx, followerId, followingId, false)
-	if err != nil {
-		return nil, err
-	}
-	return &map[string]string{
-		"status":  "successful",
-		"message": followingId + " is unfollowed ",
+	return &map[string]any{
+		"num_of_followers": totalFollower,
+		"num_of_following": totalFollowing,
 	}, nil
 }

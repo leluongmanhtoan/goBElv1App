@@ -30,7 +30,8 @@ func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, erro
 	expireAt := time.Now().Unix()
 	if !isRefeshToken {
 		tokenID = "access@" + tokenID
-		expireAt = time.Now().Add(15 * time.Minute).Unix()
+		//expireAt = time.Now().Add(15 * time.Minute).Unix()
+		expireAt = time.Now().Add(24 * time.Hour).Unix()
 	} else {
 		tokenID = "refresh@" + tokenID
 		expireAt = time.Now().AddDate(0, 0, 7).Unix()
