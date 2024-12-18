@@ -8,6 +8,8 @@ import (
 	"program/model"
 	"program/repository"
 	"time"
+
+	"github.com/uptrace/bun"
 )
 
 type Relationships struct{}
@@ -46,8 +48,8 @@ func (*Relationships) GetFollowList(ctx context.Context, limit, offset int, targ
 
 }
 
-func (r *Relationships) AddFollow(ctx context.Context, postFollow *model.Follows) error {
-	_, err := repository.SqlClientConnection.GetDB().NewInsert().
+func (r *Relationships) AddFollowTransaction(ctx context.Context, tx *bun.Tx, postFollow *model.Follows) error {
+	_, err := tx.NewInsert().
 		Model(postFollow).
 		Exec(ctx)
 	if err != nil {
@@ -80,8 +82,8 @@ func (r *Relationships) IsActiveFollow(ctx context.Context, followerId, followin
 	return isActive, nil
 }
 
-func (r *Relationships) UpdateFollow(ctx context.Context, followerId, followingId string, status bool) error {
-	_, err := repository.SqlClientConnection.GetDB().NewUpdate().
+func (r *Relationships) UpdateFollowTransaction(ctx context.Context, tx *bun.Tx, followerId, followingId string, status bool) error {
+	_, err := tx.NewUpdate().
 		Model((*model.Follows)(nil)).
 		Set("isActive = ?", status).
 		Set("updatedAt = ?", time.Now()).
@@ -90,8 +92,8 @@ func (r *Relationships) UpdateFollow(ctx context.Context, followerId, followingI
 	return err
 }
 
-func (r *Relationships) UpdateMutualFollowStatus(ctx context.Context, followerId, followingId string, status bool) error {
-	_, err := repository.SqlClientConnection.GetDB().NewUpdate().
+func (r *Relationships) UpdateMutualFollowStatusTransaction(ctx context.Context, tx *bun.Tx, followerId, followingId string, status bool) error {
+	_, err := tx.NewUpdate().
 		Model((*model.Follows)(nil)).
 		Set("isMutual = ?", status).
 		Where("followerId = ? AND followingId = ?", followerId, followingId).
@@ -99,7 +101,7 @@ func (r *Relationships) UpdateMutualFollowStatus(ctx context.Context, followerId
 	if err != nil {
 		return errors.New("can not update mutual status for follower")
 	}
-	_, err = repository.SqlClientConnection.GetDB().NewUpdate().
+	_, err = tx.NewUpdate().
 		Model((*model.Follows)(nil)).
 		Set("isMutual = ?", status).
 		Where("followerId = ? AND followingId = ?", followingId, followerId).

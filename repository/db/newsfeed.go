@@ -57,3 +57,5 @@ func (r *Newsfeed) GetNewsfeed(ctx context.Context, limit, offset int, user_id s
 	}
 	return newsfeed, nil
 }
+
+func (r *Newsfeed) CreateLike(ctx context.Context)

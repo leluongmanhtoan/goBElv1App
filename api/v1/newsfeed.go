@@ -23,9 +23,13 @@ func NewNewsFeedAPI(engine *gin.Engine, service service.INewsfeed) {
 	}
 	Group := engine.Group("api/v1")
 	{
+		//newsfeed
 		Group.POST("posts", middleware.AuthMdw.RequestAuthorization(), handler.PostNewsFeed)
 		Group.GET("user/:id/posts", middleware.AuthMdw.RequestAuthorization())
 		Group.GET("user/:id/following/posts", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveNewsfeed)
+
+		//interact newsfeed
+
 	}
 }
 
