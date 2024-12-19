@@ -34,7 +34,11 @@ func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingI
 	if err != nil {
 		return nil, err
 	}
-
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
 	exists, err := repository.RelationshipsRepo.IsFollowExists(ctx, followerId, followingId)
 	if err != nil {
 		return nil, err

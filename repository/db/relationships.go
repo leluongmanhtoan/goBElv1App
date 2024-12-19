@@ -26,13 +26,14 @@ func (*Relationships) GetFollowList(ctx context.Context, limit, offset int, targ
 		TableExpr("follows as f")
 
 	if isFollowingUser {
-		query.Join("JOIN userProfile p ON p.userId = f.followerId")
+		query.Join("JOIN profiles p ON p.userId = f.followerId")
 		query.Where("f.followingId = ?", targetUserId)
 	} else {
-		query.Join("JOIN userProfile p ON p.userId = f.followingId")
+		query.Join("JOIN profiles p ON p.userId = f.followingId")
 		query.Where("f.followerId = ?", targetUserId)
 	}
-	query.Where("isActive = 1")
+	query.Where("isActive = 1").
+		Order("p.lastname ASC")
 
 	if limit > 0 {
 		query.Limit(limit).Offset(offset)

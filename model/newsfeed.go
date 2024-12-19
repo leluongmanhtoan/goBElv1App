@@ -14,6 +14,13 @@ const (
 	Friends Privacy = "friends"
 )
 
+type LikeType string
+
+const (
+	LikePost    LikeType = "post"
+	LikeComment LikeType = "comment"
+)
+
 type Post struct {
 	bun.BaseModel `bun:"posts"`
 	PostId        string    `json:"id" bun:"postId,type:varchar(36),pk,notnull"`
@@ -44,4 +51,22 @@ type NewsFeed struct {
 	ShareCount   int       `json:"shareCount" bun:"shareCount"`
 	CreatedAt    time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
 	UpdatedAt    time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
+}
+
+type Like struct {
+	bun.BaseModel `bun:"likes"`
+	LikeId        string    `json:"likeId" bun:"likeId,type:varchar(36),pk,notnull"`
+	PostId        string    `json:"postId" bun:"postId,type:varchar(36),notnull"`
+	UserId        string    `json:"userId" bun:"userId,type:varchar(36),notnull"`
+	Type          LikeType  `json:"type" bun:"type"`
+	IsActive      bool      `json:"isActive" bun:"isActive,default:1"`
+	CreatedAt     time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
+	UpdatedAt     time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
+}
+
+type LikerInfo struct {
+	ProfileId string `json:"profileId" bun:"profileId"`
+	FirstName string `json:"firstname" bun:"firstname"`
+	Lastname  string `json:"lastname" bun:"lastname"`
+	Avatar    string `json:"avatar" bun:"avatarUrl"`
 }

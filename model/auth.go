@@ -7,7 +7,7 @@ import (
 )
 
 type User struct {
-	bun.BaseModel `bun:"userAuth"`
+	bun.BaseModel `bun:"accounts"`
 	UserUuid      string    `json:"id" bun:"id,type:varchar(36),pk,notnull"`
 	Username      string    `json:"username" bun:"username,type:varchar(50),notnull"`
 	Salt          string    `json:"salt" bun:"salt,type:varchar(64),notnull"`
