@@ -1,39 +1,41 @@
-package service
+package services
 
 import (
 	"context"
 	"errors"
-	"program/model"
-	"program/repository"
+	"program/internal/model"
+	userRepo "program/internal/repositories/user"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-func NewUser(passHandler *PasswordHandler, auth IAuth) IUser {
-	return &User{
+func NewUserService(repo userRepo.IUserRepo, passHandler *PasswordHandler, auth IJwtAuthService) IUserService {
+	return &UserService{
 		PassHandler: passHandler,
 		Authen:      auth,
+		repo:        repo,
 	}
 }
 
-type IUser interface {
+type IUserService interface {
 	Login(ctx context.Context, loginForm model.Login) (*model.LoginResponse, error)
 	Register(ctx context.Context, registerForm model.Register) (*model.RegisterResponse, error)
-	RefreshToken(token string) (*model.RefreshToken, error)
+	RefreshToken(ctx context.Context, token string) (*model.RefreshToken, error)
 	Logout(accessToken, refreshToken string) (*map[string]string, error)
 	CreateUserProfile(ctx context.Context, user_id string, userProfilePost *model.UserProfilePost) (any, error)
 	GetUserProfile(ctx context.Context, user_id string) (any, error)
 	UpdateUserProfile(ctx context.Context, user_id string, profilePut *model.UserProfilePut) (any, error)
 }
 
-type User struct {
+type UserService struct {
 	PassHandler *PasswordHandler
-	Authen      IAuth
+	Authen      IJwtAuthService
+	repo        userRepo.IUserRepo
 }
 
-func (s *User) Register(ctx context.Context, registerForm model.Register) (*model.RegisterResponse, error) {
-	userExisted, err := repository.UserRepo.DoesUserExist(ctx, registerForm.Username)
+func (s *UserService) Register(ctx context.Context, registerForm model.Register) (*model.RegisterResponse, error) {
+	userExisted, err := s.repo.DoesUserExist(ctx, registerForm.Username)
 	if err != nil {
 		return nil, errors.New("can not check user existed")
 	}
@@ -56,14 +58,14 @@ func (s *User) Register(ctx context.Context, registerForm model.Register) (*mode
 		CreatedAt: time.Now(),
 		Deleted:   0,
 	}
-	if err = repository.UserRepo.CreateUser(ctx, user); err != nil {
+	if err = s.repo.CreateUser(ctx, user); err != nil {
 		return nil, errors.New("insert new user failed")
 	}
-	newAccessToken, err := s.Authen.GenerateToken(user.UserUuid, false)
+	newAccessToken, err := s.Authen.GenerateToken(ctx, user.UserUuid, false)
 	if err != nil || newAccessToken == "" {
 		return nil, err
 	}
-	newRefreshToken, err := s.Authen.GenerateToken(user.UserUuid, true)
+	newRefreshToken, err := s.Authen.GenerateToken(ctx, user.UserUuid, true)
 	if err != nil || newRefreshToken == "" {
 		return nil, err
 	}
@@ -75,8 +77,8 @@ func (s *User) Register(ctx context.Context, registerForm model.Register) (*mode
 	}, nil
 }
 
-func (s *User) Login(ctx context.Context, loginForm model.Login) (*model.LoginResponse, error) {
-	userExisted, err := repository.UserRepo.GetByUserName(ctx, loginForm.Username)
+func (s *UserService) Login(ctx context.Context, loginForm model.Login) (*model.LoginResponse, error) {
+	userExisted, err := s.repo.GetByUserName(ctx, loginForm.Username)
 	if err != nil {
 		return nil, errors.New("can not get user by username")
 	}
@@ -87,11 +89,11 @@ func (s *User) Login(ctx context.Context, loginForm model.Login) (*model.LoginRe
 	if err != nil {
 		return nil, errors.New("wrong password")
 	}
-	newAccessToken, err := s.Authen.GenerateToken(userExisted.UserUuid, false)
+	newAccessToken, err := s.Authen.GenerateToken(ctx, userExisted.UserUuid, false)
 	if err != nil || newAccessToken == "" {
 		return nil, err
 	}
-	newRefreshToken, err := s.Authen.GenerateToken(userExisted.UserUuid, true)
+	newRefreshToken, err := s.Authen.GenerateToken(ctx, userExisted.UserUuid, true)
 	if err != nil || newRefreshToken == "" {
 		return nil, err
 	}
@@ -103,7 +105,7 @@ func (s *User) Login(ctx context.Context, loginForm model.Login) (*model.LoginRe
 	}, nil
 }
 
-func (s *User) Logout(accessToken, refreshToken string) (*map[string]string, error) {
+func (s *UserService) Logout(accessToken, refreshToken string) (*map[string]string, error) {
 	if err := s.Authen.RevokeSession(accessToken, refreshToken); err != nil {
 		return nil, err
 	}
@@ -113,12 +115,12 @@ func (s *User) Logout(accessToken, refreshToken string) (*map[string]string, err
 	}, nil
 }
 
-func (s *User) RefreshToken(token string) (*model.RefreshToken, error) {
+func (s *UserService) RefreshToken(ctx context.Context, token string) (*model.RefreshToken, error) {
 	refreshToken, err := s.Authen.ValidateToken(token, true)
 	if err != nil {
 		return nil, err
 	}
-	newAccessToken, err := s.Authen.GenerateToken(refreshToken.Subject, false)
+	newAccessToken, err := s.Authen.GenerateToken(ctx, refreshToken.Subject, false)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +130,8 @@ func (s *User) RefreshToken(token string) (*model.RefreshToken, error) {
 	}, nil
 }
 
-func (s *User) CreateUserProfile(ctx context.Context, user_id string, userProfilePost *model.UserProfilePost) (any, error) {
-	existed, err := repository.UserRepo.DoesUserProfileExist(ctx, user_id)
+func (s *UserService) CreateUserProfile(ctx context.Context, user_id string, userProfilePost *model.UserProfilePost) (any, error) {
+	existed, err := s.repo.DoesUserProfileExist(ctx, user_id)
 	if err != nil {
 		return nil, errors.New("can not check user profile exists")
 	}
@@ -149,7 +151,7 @@ func (s *User) CreateUserProfile(ctx context.Context, user_id string, userProfil
 		CreatedAt:   time.Now(),
 	}
 
-	if err := repository.UserRepo.CreateUserProfle(ctx, &userProfile); err != nil {
+	if err := s.repo.CreateUserProfle(ctx, &userProfile); err != nil {
 		return nil, err
 	}
 	return &map[string]string{
@@ -158,15 +160,15 @@ func (s *User) CreateUserProfile(ctx context.Context, user_id string, userProfil
 	}, nil
 }
 
-func (s *User) GetUserProfile(ctx context.Context, user_id string) (any, error) {
-	profile, err := repository.UserRepo.RetrieveProfileForUser(ctx, user_id)
+func (s *UserService) GetUserProfile(ctx context.Context, user_id string) (any, error) {
+	profile, err := s.repo.RetrieveProfileForUser(ctx, user_id)
 	if err != nil {
 		return nil, err
 	}
 	return profile, nil
 }
 
-func (s *User) UpdateUserProfile(ctx context.Context, user_id string, profilePut *model.UserProfilePut) (any, error) {
+func (s *UserService) UpdateUserProfile(ctx context.Context, user_id string, profilePut *model.UserProfilePut) (any, error) {
 	fields := make(map[string]interface{})
 	if profilePut.FirstName != "" {
 		fields["firstname"] = profilePut.FirstName
@@ -193,7 +195,7 @@ func (s *User) UpdateUserProfile(ctx context.Context, user_id string, profilePut
 	if len(fields) == 0 {
 		return nil, errors.New("no fields to update")
 	}
-	profile, err := repository.UserRepo.UpdateProfileForUser(ctx, user_id, fields)
+	profile, err := s.repo.UpdateProfileForUser(ctx, user_id, fields)
 	if err != nil {
 		return nil, err
 	}

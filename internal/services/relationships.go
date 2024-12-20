@@ -1,36 +1,40 @@
-package service
+package services
 
 import (
 	"context"
 	"errors"
-	"program/model"
-	"program/repository"
+	"program/internal/model"
+	relationshipsRepo "program/internal/repositories/relationships"
+
 	"time"
 )
 
-type IRelationships interface {
+type IRelationshipsService interface {
 	GetFollowers(ctx context.Context, limit, offset int, userId string) (any, error)
 	GetFollowing(ctx context.Context, limit, offset int, userId string) (any, error)
 	GetFollowRelationshipCount(ctx context.Context, userId string) (any, error)
 	ToggleFollow(ctx context.Context, followerId, followingId string) (any, error)
 }
 
-type Relationships struct {
+type RelationshipsService struct {
+	repo relationshipsRepo.IRelationshipsRepo
 }
 
-func NewRelationships() IRelationships {
-	return &Relationships{}
+func NewRelationshipsService(repo relationshipsRepo.IRelationshipsRepo) IRelationshipsService {
+	return &RelationshipsService{
+		repo: repo,
+	}
 }
 
-func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingId string) (any, error) {
-
+func (s *RelationshipsService) ToggleFollow(ctx context.Context, followerId, followingId string) (any, error) {
 	var isActive = false
 	var message = ""
 	var isMutual = false
 	if followerId == followingId {
 		return nil, errors.New("can not follow yourself")
 	}
-	tx, err := repository.SqlClientConnection.GetDB().BeginTx(ctx, nil)
+
+	tx, err := s.repo.GetDBTx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -39,31 +43,31 @@ func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingI
 			tx.Rollback()
 		}
 	}()
-	exists, err := repository.RelationshipsRepo.IsFollowExists(ctx, followerId, followingId)
+	exists, err := s.repo.IsFollowExists(ctx, followerId, followingId)
 	if err != nil {
 		return nil, err
 	}
 
 	if exists {
-		isActive, err = repository.RelationshipsRepo.IsActiveFollow(ctx, followerId, followingId)
+		isActive, err = s.repo.IsActiveFollow(ctx, followerId, followingId)
 		if err != nil {
 			return nil, err
 		}
 		if !isActive {
-			err = repository.RelationshipsRepo.UpdateFollowTransaction(ctx, &tx, followerId, followingId, true)
+			err = s.repo.UpdateFollowTransaction(ctx, tx, followerId, followingId, true)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
 			message = "refollow " + followingId + " successful"
 		} else {
-			err = repository.RelationshipsRepo.UpdateFollowTransaction(ctx, &tx, followerId, followingId, false)
+			err = s.repo.UpdateFollowTransaction(ctx, tx, followerId, followingId, false)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
 
-			err = repository.RelationshipsRepo.UpdateMutualFollowStatusTransaction(ctx, &tx, followerId, followingId, false)
+			err = s.repo.UpdateMutualFollowStatusTransaction(ctx, tx, followerId, followingId, false)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
@@ -78,7 +82,7 @@ func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingI
 			IsMutual:    false,
 			CreatedAt:   time.Now(),
 		}
-		err := repository.RelationshipsRepo.AddFollowTransaction(ctx, &tx, followRelationship)
+		err := s.repo.AddFollowTransaction(ctx, tx, followRelationship)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
@@ -86,12 +90,12 @@ func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingI
 		message = "follow " + followingId + " successful"
 	}
 	if exists && !isActive || !exists {
-		isMutual, err = repository.RelationshipsRepo.IsActiveFollow(ctx, followingId, followerId)
+		isMutual, err = s.repo.IsActiveFollow(ctx, followingId, followerId)
 		if err != nil {
 			return nil, err
 		}
 		if isMutual {
-			err := repository.RelationshipsRepo.UpdateMutualFollowStatusTransaction(ctx, &tx, followerId, followingId, true)
+			err := s.repo.UpdateMutualFollowStatusTransaction(ctx, tx, followerId, followingId, true)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
@@ -109,8 +113,8 @@ func (s *Relationships) ToggleFollow(ctx context.Context, followerId, followingI
 	}, nil
 }
 
-func (s *Relationships) GetFollowers(ctx context.Context, limit, offset int, userId string) (any, error) {
-	total, followers, err := repository.RelationshipsRepo.GetFollowList(ctx, limit, offset, userId, true)
+func (s *RelationshipsService) GetFollowers(ctx context.Context, limit, offset int, userId string) (any, error) {
+	total, followers, err := s.repo.GetFollowList(ctx, limit, offset, userId, true)
 	if err != nil {
 		return nil, err
 	}
@@ -122,8 +126,8 @@ func (s *Relationships) GetFollowers(ctx context.Context, limit, offset int, use
 	}, nil
 }
 
-func (s *Relationships) GetFollowing(ctx context.Context, limit, offset int, userId string) (any, error) {
-	total, following, err := repository.RelationshipsRepo.GetFollowList(ctx, limit, offset, userId, false)
+func (s *RelationshipsService) GetFollowing(ctx context.Context, limit, offset int, userId string) (any, error) {
+	total, following, err := s.repo.GetFollowList(ctx, limit, offset, userId, false)
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +139,8 @@ func (s *Relationships) GetFollowing(ctx context.Context, limit, offset int, use
 	}, nil
 }
 
-func (s *Relationships) GetFollowRelationshipCount(ctx context.Context, userId string) (any, error) {
-	totalFollower, totalFollowing, err := repository.RelationshipsRepo.NumOfFollowRelationship(ctx, userId)
+func (s *RelationshipsService) GetFollowRelationshipCount(ctx context.Context, userId string) (any, error) {
+	totalFollower, totalFollowing, err := s.repo.NumOfFollowRelationship(ctx, userId)
 	if err != nil {
 		return nil, err
 	}

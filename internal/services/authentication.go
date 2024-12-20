@@ -1,11 +1,13 @@
-package service
+package services
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"program/repository"
+	authenticationRepo "program/internal/repositories/auth"
+
 	"strings"
 	"time"
 
@@ -14,34 +16,35 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type IAuth interface {
-	GenerateToken(userId string, isRefeshToken bool) (string, error)
+type IJwtAuthService interface {
+	GenerateToken(ctx context.Context, userId string, isRefeshToken bool) (string, error)
 	ValidateToken(token string, isRefreshToken bool) (*jwt.StandardClaims, error)
 	RevokeSession(accessToken, refreshToken string) error
 }
 
-type JwtAuth struct {
+type JwtAuthService struct {
 	SecretKey string
 	Issuer    string
+	Repo      authenticationRepo.IAuthenticationRepo
 }
 
-func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, error) {
+func (s *JwtAuthService) GenerateToken(ctx context.Context, userId string, isRefeshToken bool) (string, error) {
 	tokenID := uuid.NewString()
-	expireAt := time.Now().Unix()
+	expireAt := time.Now()
 	if !isRefeshToken {
 		tokenID = "access@" + tokenID
 		//expireAt = time.Now().Add(15 * time.Minute).Unix()
-		expireAt = time.Now().Add(24 * time.Hour).Unix()
+		expireAt = time.Now().Add(24 * time.Hour)
 	} else {
 		tokenID = "refresh@" + tokenID
-		expireAt = time.Now().AddDate(0, 0, 7).Unix()
+		expireAt = time.Now().AddDate(0, 0, 7)
 	}
 	claims := &jwt.StandardClaims{
 		Id:        tokenID,
 		Subject:   userId,
 		IssuedAt:  time.Now().Unix(),
 		Issuer:    s.Issuer,
-		ExpiresAt: expireAt,
+		ExpiresAt: expireAt.Unix(),
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	token, err := t.SignedString([]byte(s.SecretKey))
@@ -49,7 +52,13 @@ func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, erro
 		return "", fmt.Errorf("failed to sign JWT: %w", err)
 	}
 	if isRefeshToken {
-		_, err := repository.RedisClientConnection.SAdd("userId:"+userId+":tokenID_valid", tokenID)
+		/*
+			_, err := repository.RedisClientConnection.SAdd("userId:"+userId+":tokenID_valid", tokenID)
+			if err != nil {
+				return "", err
+			}
+		*/
+		err := s.Repo.AddValidRefreshToken(ctx, userId, tokenID, expireAt.Sub(time.Now()))
 		if err != nil {
 			return "", err
 		}
@@ -58,7 +67,7 @@ func (s *JwtAuth) GenerateToken(userId string, isRefeshToken bool) (string, erro
 	return token, nil
 }
 
-func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.StandardClaims, error) {
+func (s *JwtAuthService) ValidateToken(token string, isRefreshToken bool) (*jwt.StandardClaims, error) {
 	if !strings.HasPrefix(token, "Bearer ") && !isRefreshToken {
 		return nil, fmt.Errorf("not a Bearer authorization")
 	}
@@ -80,8 +89,8 @@ func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.Standar
 	if !ok {
 		return nil, errors.New("can not claims token")
 	}
-	tokenType := strings.Split(claims.Id, "@")
-	if !isRefreshToken {
+	//tokenType := strings.Split(claims.Id, "@")
+	/*if !isRefreshToken {
 		if tokenType[0] != "access" {
 			return nil, errors.New("this is not access token")
 		}
@@ -97,7 +106,7 @@ func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.Standar
 		if !isValidToken || err != nil {
 			return nil, errors.New("refresh token is invalid")
 		}
-	}
+	}*/
 	now := time.Now().Unix()
 	if claims.IssuedAt > now {
 		return nil, errors.New("token issued in the future")
@@ -111,34 +120,43 @@ func (s *JwtAuth) ValidateToken(token string, isRefreshToken bool) (*jwt.Standar
 
 // Private check revoke token
 // func (s *JwtAuth) isTokenRevoked(tokenId string) bool {
-func (s *JwtAuth) RevokeSession(accessToken, refreshToken string) error {
+func (s *JwtAuthService) RevokeSession(accessToken, refreshToken string) error {
 	keyFunc := func(t_ *jwt.Token) (any, error) {
 		if _, ok := t_.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method %v", t_.Header["alg"])
 		}
 		return []byte(s.SecretKey), nil
 	}
-	parsedToken, err := jwt.ParseWithClaims(refreshToken, &jwt.StandardClaims{}, keyFunc)
+	/*if refreshToken != "" {
+		parsedRefreshToken, err := jwt.ParseWithClaims(refreshToken, &jwt.StandardClaims{}, keyFunc)
+		if err != nil {
+			return fmt.Errorf("can not parse token: %v", err)
+		}
+		Rclaims, ok := parsedRefreshToken.Claims.(*jwt.StandardClaims)
+		if !parsedRefreshToken.Valid {
+			return errors.New("invalid claims")
+		}
+		if !ok {
+			return errors.New("can not claims token")
+		}
+
+		_, err = repository.RedisClientConnection.SRem("userId:"+Rclaims.Subject+":tokenID_valid", Rclaims.Id)
+		if err != nil {
+			return err
+		}
+	}*/
+	parsedAccessToken, err := jwt.ParseWithClaims(accessToken, &jwt.StandardClaims{}, keyFunc)
 	if err != nil {
 		return fmt.Errorf("can not parse token: %v", err)
 	}
-	claims, ok := parsedToken.Claims.(*jwt.StandardClaims)
-	if !parsedToken.Valid {
+	if !parsedAccessToken.Valid {
 		return errors.New("invalid claims")
 	}
-	if !ok {
-		return errors.New("can not claims token")
-	}
-
-	_, err = repository.RedisClientConnection.SRem("userId:"+claims.Subject+":tokenID_valid", claims.Id)
+	/*_, err = repository.RedisClientConnection.SetTTL("blacklist:accessToken:"+accessToken, "revoked", time.Duration(30*time.Minute))
 	if err != nil {
 		return err
 	}
-	_, err = repository.RedisClientConnection.SetTTL("blacklist:accessToken:"+accessToken, "revoked", time.Duration(30*time.Minute))
-	if err != nil {
-		return err
-	}
-
+	*/
 	return nil
 }
 

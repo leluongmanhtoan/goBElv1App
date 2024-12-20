@@ -1,20 +1,24 @@
-package db
+package userRepo
 
 import (
 	"context"
 	"fmt"
-	"program/model"
-	"program/repository"
+	"program/internal/database"
+	"program/internal/model"
 )
 
-func NewUserRepo() repository.IUser {
-	return &User{}
+type UserRepo struct {
+	db database.ISqlConnection
 }
 
-type User struct{}
+func NewUserRepo(db database.ISqlConnection) IUserRepo {
+	return &UserRepo{
+		db: db,
+	}
+}
 
-func (r *User) DoesUserExist(ctx context.Context, username string) (bool, error) {
-	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *UserRepo) DoesUserExist(ctx context.Context, username string) (bool, error) {
+	exists, err := r.db.GetDB().NewSelect().
 		Model((*model.User)(nil)).
 		ColumnExpr("1").
 		Where("username = ?", username).
@@ -25,8 +29,8 @@ func (r *User) DoesUserExist(ctx context.Context, username string) (bool, error)
 	return exists, nil
 }
 
-func (r *User) DoesUserProfileExist(ctx context.Context, userID string) (bool, error) {
-	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *UserRepo) DoesUserProfileExist(ctx context.Context, userID string) (bool, error) {
+	exists, err := r.db.GetDB().NewSelect().
 		Model((*model.UserProfile)(nil)).
 		ColumnExpr("1").
 		Where("userId = ?", userID).
@@ -37,9 +41,9 @@ func (r *User) DoesUserProfileExist(ctx context.Context, userID string) (bool, e
 	return exists, nil
 }
 
-func (r *User) GetByUserName(ctx context.Context, username string) (*model.User, error) {
+func (r *UserRepo) GetByUserName(ctx context.Context, username string) (*model.User, error) {
 	user := new(model.User)
-	err := repository.SqlClientConnection.GetDB().NewSelect().
+	err := r.db.GetDB().NewSelect().
 		Model(user).
 		Where("username = ?", username).
 		Scan(ctx)
@@ -49,8 +53,8 @@ func (r *User) GetByUserName(ctx context.Context, username string) (*model.User,
 	return user, nil
 }
 
-func (r *User) CreateUser(ctx context.Context, user *model.User) error {
-	_, err := repository.SqlClientConnection.GetDB().NewInsert().
+func (r *UserRepo) CreateUser(ctx context.Context, user *model.User) error {
+	_, err := r.db.GetDB().NewInsert().
 		Model(user).
 		Exec(ctx)
 	if err != nil {
@@ -59,8 +63,8 @@ func (r *User) CreateUser(ctx context.Context, user *model.User) error {
 	return nil
 }
 
-func (r *User) CreateUserProfle(ctx context.Context, userProfile *model.UserProfile) error {
-	_, err := repository.SqlClientConnection.GetDB().NewInsert().
+func (r *UserRepo) CreateUserProfle(ctx context.Context, userProfile *model.UserProfile) error {
+	_, err := r.db.GetDB().NewInsert().
 		Model(userProfile).
 		Exec(ctx)
 	if err != nil {
@@ -69,9 +73,9 @@ func (r *User) CreateUserProfle(ctx context.Context, userProfile *model.UserProf
 	return nil
 }
 
-func (r *User) RetrieveProfileForUser(ctx context.Context, user_id string) (*model.UserProfile, error) {
+func (r *UserRepo) RetrieveProfileForUser(ctx context.Context, user_id string) (*model.UserProfile, error) {
 	profile := new(model.UserProfile)
-	err := repository.SqlClientConnection.GetDB().NewSelect().
+	err := r.db.GetDB().NewSelect().
 		Model(profile).
 		Where("userId = ?", user_id).
 		Limit(1).
@@ -82,8 +86,8 @@ func (r *User) RetrieveProfileForUser(ctx context.Context, user_id string) (*mod
 	return profile, nil
 }
 
-func (r *User) UpdateProfileForUser(ctx context.Context, user_id string, fields map[string]any) (*model.UserProfile, error) {
-	query := repository.SqlClientConnection.GetDB().NewUpdate().
+func (r *UserRepo) UpdateProfileForUser(ctx context.Context, user_id string, fields map[string]any) (*model.UserProfile, error) {
+	query := r.db.GetDB().NewUpdate().
 		Model(&model.UserProfile{}).
 		Where("userId = ?", user_id)
 	for field, value := range fields {

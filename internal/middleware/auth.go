@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"net/http"
-	"program/service"
+	"program/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,12 +12,12 @@ type IAuthor interface {
 }
 
 type AuthorMwd struct {
-	authen service.IAuth
+	authen services.IJwtAuthService
 }
 
 var AuthMdw IAuthor
 
-func NewAuthorMdw(auth service.IAuth) IAuthor {
+func NewAuthorMdw(auth services.IJwtAuthService) IAuthor {
 	return &AuthorMwd{
 		authen: auth,
 	}
@@ -41,7 +41,8 @@ func (m *AuthorMwd) RequestAuthorization() gin.HandlerFunc {
 			c.JSON(
 				http.StatusUnauthorized,
 				map[string]any{
-					"error": http.StatusText(http.StatusUnauthorized),
+					"error":   http.StatusText(http.StatusUnauthorized),
+					"message": "Invalid or expired token",
 				},
 			)
 			c.Abort()

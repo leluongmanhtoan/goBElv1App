@@ -1,24 +1,33 @@
-package db
+package newsfeedRepo
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"program/model"
-	"program/repository"
+	"program/internal/database"
+	"program/internal/model"
 	"time"
 
 	"github.com/uptrace/bun"
 )
 
-type Newsfeed struct{}
-
-func NewNewsFeedRepo() repository.INewsfeed {
-	return &Newsfeed{}
+type NewsfeedRepo struct {
+	db database.ISqlConnection
 }
 
-func (r *Newsfeed) PostNews(ctx context.Context, post *model.Post) error {
-	_, err := repository.SqlClientConnection.GetDB().NewInsert().
+func NewNewsfeedRepo(db database.ISqlConnection) INewsfeedRepo {
+	return &NewsfeedRepo{
+		db: db,
+	}
+}
+
+func (r *NewsfeedRepo) GetDBTx(ctx context.Context) (*bun.Tx, error) {
+	tx, err := r.db.GetDB().BeginTx(ctx, nil)
+	return &tx, err
+}
+
+func (r *NewsfeedRepo) PostNews(ctx context.Context, post *model.Post) error {
+	_, err := r.db.GetDB().NewInsert().
 		Model(post).
 		Exec(ctx)
 	if err != nil {
@@ -27,9 +36,9 @@ func (r *Newsfeed) PostNews(ctx context.Context, post *model.Post) error {
 	return nil
 }
 
-func (r *Newsfeed) GetNewsfeed(ctx context.Context, limit, offset int, user_id string, isFromFollowing bool) (*[]model.NewsFeed, error) {
+func (r *NewsfeedRepo) GetNewsfeed(ctx context.Context, limit, offset int, user_id string, isFromFollowing bool) (*[]model.NewsFeed, error) {
 	newsfeed := new([]model.NewsFeed)
-	query := repository.SqlClientConnection.GetDB().NewSelect().Distinct().
+	query := r.db.GetDB().NewSelect().Distinct().
 		Column(
 			"pf.avatarUrl",
 			"pf.firstname",
@@ -63,7 +72,7 @@ func (r *Newsfeed) GetNewsfeed(ctx context.Context, limit, offset int, user_id s
 	return newsfeed, nil
 }
 
-func (r *Newsfeed) CreateLike(ctx context.Context, tx *bun.Tx, like *model.Like) error {
+func (r *NewsfeedRepo) CreateLike(ctx context.Context, tx *bun.Tx, like *model.Like) error {
 	_, err := tx.NewInsert().
 		Model(like).
 		Exec(ctx)
@@ -73,7 +82,7 @@ func (r *Newsfeed) CreateLike(ctx context.Context, tx *bun.Tx, like *model.Like)
 	return nil
 }
 
-func (r *Newsfeed) IncreaseLikeCount(ctx context.Context, tx *bun.Tx, postId string) error {
+func (r *NewsfeedRepo) IncreaseLikeCount(ctx context.Context, tx *bun.Tx, postId string) error {
 	_, err := tx.NewUpdate().Model((*model.Post)(nil)).
 		Set("likeCount = likeCount + 1").
 		Where("postId = ?", postId).
@@ -84,7 +93,7 @@ func (r *Newsfeed) IncreaseLikeCount(ctx context.Context, tx *bun.Tx, postId str
 	return nil
 }
 
-func (r *Newsfeed) DecreaseLikeCount(ctx context.Context, tx *bun.Tx, postId string) error {
+func (r *NewsfeedRepo) DecreaseLikeCount(ctx context.Context, tx *bun.Tx, postId string) error {
 	_, err := tx.NewUpdate().Model((*model.Post)(nil)).
 		Set("likeCount = likeCount - 1").
 		Where("postId = ?", postId).
@@ -95,8 +104,8 @@ func (r *Newsfeed) DecreaseLikeCount(ctx context.Context, tx *bun.Tx, postId str
 	return nil
 }
 
-func (r *Newsfeed) IsLikeExisted(ctx context.Context, postId, userId string) (bool, error) {
-	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *NewsfeedRepo) IsLikeExisted(ctx context.Context, postId, userId string) (bool, error) {
+	exists, err := r.db.GetDB().NewSelect().
 		Model((*model.Like)(nil)).
 		ColumnExpr("1").
 		Where("postId = ?", postId).
@@ -108,8 +117,8 @@ func (r *Newsfeed) IsLikeExisted(ctx context.Context, postId, userId string) (bo
 	return exists, nil
 }
 
-func (r *Newsfeed) IsPostExisted(ctx context.Context, postId string) (bool, error) {
-	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *NewsfeedRepo) IsPostExisted(ctx context.Context, postId string) (bool, error) {
+	exists, err := r.db.GetDB().NewSelect().
 		Model((*model.Post)(nil)).
 		ColumnExpr("1").
 		Where("postId = ?", postId).
@@ -120,8 +129,8 @@ func (r *Newsfeed) IsPostExisted(ctx context.Context, postId string) (bool, erro
 	return exists, nil
 }
 
-func (r *Newsfeed) IsActiveLike(ctx context.Context, post_id, user_id string) (bool, error) {
-	isActive, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *NewsfeedRepo) IsActiveLike(ctx context.Context, post_id, user_id string) (bool, error) {
+	isActive, err := r.db.GetDB().NewSelect().
 		Model((*model.Like)(nil)).
 		ColumnExpr("1").
 		Where("userId = ? AND postId = ? AND isActive = ?", user_id, post_id, true).
@@ -132,7 +141,7 @@ func (r *Newsfeed) IsActiveLike(ctx context.Context, post_id, user_id string) (b
 	return isActive, nil
 }
 
-func (r *Newsfeed) UpdateLikeTransaction(ctx context.Context, tx *bun.Tx, user_id, post_id string, status bool) error {
+func (r *NewsfeedRepo) UpdateLikeTransaction(ctx context.Context, tx *bun.Tx, user_id, post_id string, status bool) error {
 	_, err := tx.NewUpdate().
 		Model((*model.Like)(nil)).
 		Set("isActive = ?", status).
@@ -142,9 +151,9 @@ func (r *Newsfeed) UpdateLikeTransaction(ctx context.Context, tx *bun.Tx, user_i
 	return err
 }
 
-func (r *Newsfeed) GetLikers(ctx context.Context, limit, offset int, post_id string) (*[]model.LikerInfo, error) {
+func (r *NewsfeedRepo) GetLikers(ctx context.Context, limit, offset int, post_id string) (*[]model.LikerInfo, error) {
 	likers := new([]model.LikerInfo)
-	query := repository.SqlClientConnection.GetDB().NewSelect().
+	query := r.db.GetDB().NewSelect().
 		Column("p.profileId", "p.firstname", "p.lastname", "p.avatarUrl").
 		TableExpr("likes as l").
 		Join("JOIN profiles p ON p.userId=l.userId").

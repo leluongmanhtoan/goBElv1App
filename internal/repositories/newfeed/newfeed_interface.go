@@ -1,13 +1,14 @@
-package repository
+package newsfeedRepo
 
 import (
 	"context"
-	"program/model"
+	"program/internal/model"
 
 	"github.com/uptrace/bun"
 )
 
-type INewsfeed interface {
+type INewsfeedRepo interface {
+	GetDBTx(ctx context.Context) (*bun.Tx, error)
 	PostNews(ctx context.Context, post *model.Post) error
 	GetNewsfeed(ctx context.Context, limit, offset int, user_id string, isFromFollowing bool) (*[]model.NewsFeed, error)
 	CreateLike(ctx context.Context, tx *bun.Tx, like *model.Like) error
@@ -19,5 +20,3 @@ type INewsfeed interface {
 	IsPostExisted(ctx context.Context, postId string) (bool, error)
 	GetLikers(ctx context.Context, limit, offset int, post_id string) (*[]model.LikerInfo, error)
 }
-
-var NewsfeedRepo INewsfeed

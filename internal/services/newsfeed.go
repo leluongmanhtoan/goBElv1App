@@ -1,31 +1,34 @@
-package service
+package services
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"program/model"
-	"program/repository"
+	"program/internal/model"
+	newsfeedRepo "program/internal/repositories/newfeed"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-type INewsfeed interface {
+type INewsfeedService interface {
 	PostNewsfeed(ctx context.Context, user_id string, post *model.NewsfeedPost) (any, error)
 	GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error)
 	ToggleLikePost(ctx context.Context, user_id, post_id string) (any, error)
 	GetLikers(ctx context.Context, limit, offset int, post_id string) (any, error)
 }
 
-type Newsfeed struct {
+type NewsfeedService struct {
+	repo newsfeedRepo.INewsfeedRepo
 }
 
-func NewNewsFeed() INewsfeed {
-	return &Newsfeed{}
+func NewNewsFeedService(repo newsfeedRepo.INewsfeedRepo) INewsfeedService {
+	return &NewsfeedService{
+		repo: repo,
+	}
 }
 
-func (s *Newsfeed) PostNewsfeed(ctx context.Context, user_id string, post *model.NewsfeedPost) (any, error) {
+func (s *NewsfeedService) PostNewsfeed(ctx context.Context, user_id string, post *model.NewsfeedPost) (any, error) {
 	newpost := &model.Post{
 		PostId:       uuid.NewString(),
 		UserId:       user_id,
@@ -37,7 +40,7 @@ func (s *Newsfeed) PostNewsfeed(ctx context.Context, user_id string, post *model
 		Deleted:      0,
 		CreatedAt:    time.Now(),
 	}
-	if err := repository.NewsfeedRepo.PostNews(ctx, newpost); err != nil {
+	if err := s.repo.PostNews(ctx, newpost); err != nil {
 		return nil, err
 	}
 	return &map[string]string{
@@ -47,8 +50,8 @@ func (s *Newsfeed) PostNewsfeed(ctx context.Context, user_id string, post *model
 	}, nil
 }
 
-func (s *Newsfeed) GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error) {
-	newsfeed, err := repository.NewsfeedRepo.GetNewsfeed(ctx, limit, offset, user_id, true)
+func (s *NewsfeedService) GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error) {
+	newsfeed, err := s.repo.GetNewsfeed(ctx, limit, offset, user_id, true)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +64,8 @@ func (s *Newsfeed) GetNewsfeed(ctx context.Context, limit, offset int, user_id s
 	}, nil
 }
 
-func (s *Newsfeed) ToggleLikePost(ctx context.Context, user_id, post_id string) (any, error) {
-	tx, err := repository.SqlClientConnection.GetDB().BeginTx(ctx, nil)
+func (s *NewsfeedService) ToggleLikePost(ctx context.Context, user_id, post_id string) (any, error) {
+	tx, err := s.repo.GetDBTx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -71,14 +74,14 @@ func (s *Newsfeed) ToggleLikePost(ctx context.Context, user_id, post_id string) 
 			tx.Rollback()
 		}
 	}()
-	postExisted, err := repository.NewsfeedRepo.IsPostExisted(ctx, post_id)
+	postExisted, err := s.repo.IsPostExisted(ctx, post_id)
 	if err != nil {
 		return nil, err
 	}
 	if !postExisted {
 		return nil, errors.New("postId not found")
 	}
-	exists, err := repository.NewsfeedRepo.IsLikeExisted(ctx, post_id, user_id)
+	exists, err := s.repo.IsLikeExisted(ctx, post_id, user_id)
 	if err != nil {
 		return nil, err
 	}
@@ -91,39 +94,39 @@ func (s *Newsfeed) ToggleLikePost(ctx context.Context, user_id, post_id string) 
 			IsActive:  true,
 			CreatedAt: time.Now(),
 		}
-		err := repository.NewsfeedRepo.CreateLike(ctx, &tx, newlike)
+		err := s.repo.CreateLike(ctx, tx, newlike)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
 		}
-		err = repository.NewsfeedRepo.IncreaseLikeCount(ctx, &tx, post_id)
+		err = s.repo.IncreaseLikeCount(ctx, tx, post_id)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
 		}
 	} else {
-		isActive, err := repository.NewsfeedRepo.IsActiveLike(ctx, post_id, user_id)
+		isActive, err := s.repo.IsActiveLike(ctx, post_id, user_id)
 		if err != nil {
 			return nil, err
 		}
 		if isActive {
-			err = repository.NewsfeedRepo.UpdateLikeTransaction(ctx, &tx, user_id, post_id, false)
+			err = s.repo.UpdateLikeTransaction(ctx, tx, user_id, post_id, false)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
-			err = repository.NewsfeedRepo.DecreaseLikeCount(ctx, &tx, post_id)
+			err = s.repo.DecreaseLikeCount(ctx, tx, post_id)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
 		} else {
-			err = repository.NewsfeedRepo.UpdateLikeTransaction(ctx, &tx, user_id, post_id, true)
+			err = s.repo.UpdateLikeTransaction(ctx, tx, user_id, post_id, true)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
-			err = repository.NewsfeedRepo.IncreaseLikeCount(ctx, &tx, post_id)
+			err = s.repo.IncreaseLikeCount(ctx, tx, post_id)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
@@ -140,8 +143,8 @@ func (s *Newsfeed) ToggleLikePost(ctx context.Context, user_id, post_id string) 
 
 }
 
-func (s *Newsfeed) GetLikers(ctx context.Context, limit, offset int, post_id string) (any, error) {
-	likers, err := repository.NewsfeedRepo.GetLikers(ctx, limit, offset, post_id)
+func (s *NewsfeedService) GetLikers(ctx context.Context, limit, offset int, post_id string) (any, error) {
+	likers, err := s.repo.GetLikers(ctx, limit, offset, post_id)
 	if err != nil {
 		return nil, err
 	}

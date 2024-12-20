@@ -1,27 +1,34 @@
-package db
+package relationshipsRepo
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"program/model"
-	"program/repository"
+	"program/internal/database"
+	"program/internal/model"
 	"time"
 
 	"github.com/uptrace/bun"
 )
 
-type Relationships struct{}
-
-func NewRelationshipsRepo() repository.IRelationships {
-	return &Relationships{}
+type RelationshipsRepo struct {
+	db database.ISqlConnection
 }
 
-func (*Relationships) GetFollowList(ctx context.Context, limit, offset int, targetUserId string, isFollowingUser bool) (int, *[]model.FollowerInfo, error) {
+func NewRelationshipsRepo(db database.ISqlConnection) IRelationshipsRepo {
+	return &RelationshipsRepo{db: db}
+}
+
+func (r *RelationshipsRepo) GetDBTx(ctx context.Context) (*bun.Tx, error) {
+	tx, err := r.db.GetDB().BeginTx(ctx, nil)
+	return &tx, err
+}
+
+func (r *RelationshipsRepo) GetFollowList(ctx context.Context, limit, offset int, targetUserId string, isFollowingUser bool) (int, *[]model.FollowerInfo, error) {
 	//var followers []model.FollowerInfo
 	follow := new([]model.FollowerInfo)
-	query := repository.SqlClientConnection.GetDB().NewSelect().
+	query := r.db.GetDB().NewSelect().
 		Column("p.profileId", "p.firstname", "p.lastname", "p.avatarUrl").
 		TableExpr("follows as f")
 
@@ -49,7 +56,7 @@ func (*Relationships) GetFollowList(ctx context.Context, limit, offset int, targ
 
 }
 
-func (r *Relationships) AddFollowTransaction(ctx context.Context, tx *bun.Tx, postFollow *model.Follows) error {
+func (r *RelationshipsRepo) AddFollowTransaction(ctx context.Context, tx *bun.Tx, postFollow *model.Follows) error {
 	_, err := tx.NewInsert().
 		Model(postFollow).
 		Exec(ctx)
@@ -59,8 +66,8 @@ func (r *Relationships) AddFollowTransaction(ctx context.Context, tx *bun.Tx, po
 	return nil
 }
 
-func (r *Relationships) IsFollowExists(ctx context.Context, followerId, followingId string) (bool, error) {
-	exists, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *RelationshipsRepo) IsFollowExists(ctx context.Context, followerId, followingId string) (bool, error) {
+	exists, err := r.db.GetDB().NewSelect().
 		Model((*model.Follows)(nil)).
 		ColumnExpr("1").
 		Where("followerId = ? AND followingId = ?", followerId, followingId).
@@ -71,8 +78,8 @@ func (r *Relationships) IsFollowExists(ctx context.Context, followerId, followin
 	return exists, nil
 }
 
-func (r *Relationships) IsActiveFollow(ctx context.Context, followerId, followingId string) (bool, error) {
-	isActive, err := repository.SqlClientConnection.GetDB().NewSelect().
+func (r *RelationshipsRepo) IsActiveFollow(ctx context.Context, followerId, followingId string) (bool, error) {
+	isActive, err := r.db.GetDB().NewSelect().
 		Model((*model.Follows)(nil)).
 		ColumnExpr("1").
 		Where("followerId = ? AND followingId = ? AND isActive = ?", followerId, followingId, true).
@@ -83,7 +90,7 @@ func (r *Relationships) IsActiveFollow(ctx context.Context, followerId, followin
 	return isActive, nil
 }
 
-func (r *Relationships) UpdateFollowTransaction(ctx context.Context, tx *bun.Tx, followerId, followingId string, status bool) error {
+func (r *RelationshipsRepo) UpdateFollowTransaction(ctx context.Context, tx *bun.Tx, followerId, followingId string, status bool) error {
 	_, err := tx.NewUpdate().
 		Model((*model.Follows)(nil)).
 		Set("isActive = ?", status).
@@ -93,7 +100,7 @@ func (r *Relationships) UpdateFollowTransaction(ctx context.Context, tx *bun.Tx,
 	return err
 }
 
-func (r *Relationships) UpdateMutualFollowStatusTransaction(ctx context.Context, tx *bun.Tx, followerId, followingId string, status bool) error {
+func (r *RelationshipsRepo) UpdateMutualFollowStatusTransaction(ctx context.Context, tx *bun.Tx, followerId, followingId string, status bool) error {
 	_, err := tx.NewUpdate().
 		Model((*model.Follows)(nil)).
 		Set("isMutual = ?", status).
@@ -113,10 +120,10 @@ func (r *Relationships) UpdateMutualFollowStatusTransaction(ctx context.Context,
 	return nil
 }
 
-func (r *Relationships) NumOfFollowRelationship(ctx context.Context, targetUserId string) (int, int, error) {
+func (r *RelationshipsRepo) NumOfFollowRelationship(ctx context.Context, targetUserId string) (int, int, error) {
 	var followerCount = 0
 	var followingCount = 0
-	err := repository.SqlClientConnection.GetDB().NewSelect().
+	err := r.db.GetDB().NewSelect().
 		Model((*model.Follows)(nil)).
 		Where("followingId = ?", targetUserId).
 		Where("isActive = 1").
@@ -126,7 +133,7 @@ func (r *Relationships) NumOfFollowRelationship(ctx context.Context, targetUserI
 		return 0, 0, err
 	}
 
-	err = repository.SqlClientConnection.GetDB().NewSelect().
+	err = r.db.GetDB().NewSelect().
 		Model((*model.Follows)(nil)).
 		Where("followerId = ?", targetUserId).
 		ColumnExpr("COUNT(*)").

@@ -3,22 +3,22 @@ package api
 import (
 	"errors"
 	"net/http"
+	"program/internal/middleware"
+	"program/internal/model"
 	"program/internal/response"
+	"program/internal/services"
 	"program/internal/validate"
-	"program/middleware"
-	"program/model"
-	"program/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 // Create user struct -> container include all func for handler
 type User struct {
-	userService service.IUser
+	userService services.IUserService
 }
 
 // Func create api collection
-func NewUserAPI(engine *gin.Engine, userSerivce service.IUser) {
+func NewUserAPI(engine *gin.Engine, userSerivce services.IUserService) {
 	handler := &User{
 		userService: userSerivce,
 	}
@@ -29,6 +29,14 @@ func NewUserAPI(engine *gin.Engine, userSerivce service.IUser) {
 		Group.POST("auth/login", handler.Login)
 		Group.POST("auth/logout", handler.Logout)
 		Group.POST("auth/refresh", handler.RefeshToken)
+		Group.POST("auth/validate", middleware.AuthMdw.RequestAuthorization(), func(c *gin.Context) {
+			user_id, existed := c.Get("user_id")
+			if !existed {
+				c.JSON(response.BadRequest(errors.New("user_id not found")))
+				return
+			}
+			c.JSON(http.StatusOK, user_id.(string))
+		})
 
 		//Profile
 		Group.GET("user/profile", middleware.AuthMdw.RequestAuthorization(), handler.GetUserProfile)
@@ -70,7 +78,7 @@ func (h *User) Login(c *gin.Context) {
 func (h *User) Logout(c *gin.Context) {
 	var request struct {
 		AccessToken  string `json:"accessToken" validate:"required"`
-		RefreshToken string `json:"refreshToken" validate:"required"`
+		RefreshToken string `json:"refreshToken"`
 	}
 	if !validate.ValidateRequest(c, &request) {
 		return
@@ -94,7 +102,7 @@ func (h *User) RefeshToken(c *gin.Context) {
 	if !validate.ValidateRequest(c, &request) {
 		return
 	}
-	refreshResponse, err := h.userService.RefreshToken(request.RefreshToken)
+	refreshResponse, err := h.userService.RefreshToken(c, request.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{
 			"status":  "error",

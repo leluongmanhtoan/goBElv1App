@@ -1,11 +1,11 @@
-package repository
+package userRepo
 
 import (
 	"context"
-	"program/model"
+	"program/internal/model"
 )
 
-type IUser interface {
+type IUserRepo interface {
 	DoesUserExist(ctx context.Context, username string) (bool, error)
 	DoesUserProfileExist(ctx context.Context, userID string) (bool, error)
 	GetByUserName(ctx context.Context, username string) (*model.User, error)
@@ -14,5 +14,3 @@ type IUser interface {
 	RetrieveProfileForUser(ctx context.Context, user_id string) (*model.UserProfile, error)
 	UpdateProfileForUser(ctx context.Context, user_id string, fields map[string]any) (*model.UserProfile, error)
 }
-
-var UserRepo IUser

@@ -3,20 +3,20 @@ package api
 import (
 	"errors"
 	"net/http"
+	"program/internal/middleware"
 	"program/internal/response"
+	"program/internal/services"
 	"program/internal/validate"
-	"program/middleware"
-	"program/service"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Relationships struct {
-	service service.IRelationships
+	service services.IRelationshipsService
 }
 
-func NewRelationshipsAPI(engine *gin.Engine, relationshipsService service.IRelationships) {
+func NewRelationshipsAPI(engine *gin.Engine, relationshipsService services.IRelationshipsService) {
 	handler := &Relationships{
 		service: relationshipsService,
 	}

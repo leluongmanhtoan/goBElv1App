@@ -3,21 +3,21 @@ package api
 import (
 	"errors"
 	"net/http"
+	"program/internal/middleware"
+	"program/internal/model"
 	"program/internal/response"
+	"program/internal/services"
 	"program/internal/validate"
-	"program/middleware"
-	"program/model"
-	"program/service"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Newsfeed struct {
-	service service.INewsfeed
+	service services.INewsfeedService
 }
 
-func NewNewsFeedAPI(engine *gin.Engine, service service.INewsfeed) {
+func NewNewsFeedAPI(engine *gin.Engine, service services.INewsfeedService) {
 	handler := &Newsfeed{
 		service: service,
 	}
@@ -26,7 +26,7 @@ func NewNewsFeedAPI(engine *gin.Engine, service service.INewsfeed) {
 		//newsfeed
 		Group.POST("posts", middleware.AuthMdw.RequestAuthorization(), handler.PostNewsFeed)
 		Group.GET("user/:id/posts", middleware.AuthMdw.RequestAuthorization())
-		Group.GET("user/:id/following/posts", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveNewsfeed)
+		Group.GET("user/following/posts", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveNewsfeed)
 
 		//interact newsfeed
 		Group.POST("posts/:postId/like", middleware.AuthMdw.RequestAuthorization(), handler.ToggleLikePost)
@@ -56,14 +56,9 @@ func (h *Newsfeed) PostNewsFeed(c *gin.Context) {
 }
 
 func (h *Newsfeed) RetrieveNewsfeed(c *gin.Context) {
-	_, existed := c.Get("user_id")
+	user_id, existed := c.Get("user_id")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
-		return
-	}
-	id := c.Param("id")
-	if len(id) <= 0 {
-		c.JSON(response.BadRequest(errors.New("id is empty")))
 		return
 	}
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -76,7 +71,7 @@ func (h *Newsfeed) RetrieveNewsfeed(c *gin.Context) {
 		c.JSON(response.BadRequest(errors.New("offset is a number")))
 		return
 	}
-	getResponse, err := h.service.GetNewsfeed(c, limit, offset, id)
+	getResponse, err := h.service.GetNewsfeed(c, limit, offset, user_id.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{
 			"status":  "error",
