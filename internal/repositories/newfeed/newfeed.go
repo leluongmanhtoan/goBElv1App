@@ -54,7 +54,7 @@ func (r *NewsfeedRepo) GetNewsfeed(ctx context.Context, limit, offset int, user_
 		Join("JOIN profiles pf ON pf.userId = f.followingId").
 		Join("JOIN posts p ON p.userId = f.followingId")
 	if isFromFollowing {
-		query.Where("f.followerId = ? OR f.followingId = ? AND deleted = 0 AND p.createdAt >= NOW() - INTERVAL 7 DAY", user_id, user_id)
+		query.Where("f.followerId = ? OR p.userId = ? AND deleted = 0 AND p.createdAt >= NOW() - INTERVAL 7 DAY", user_id, user_id)
 	} else {
 		query.Where("p.userId = ? AND deleted = 0", user_id)
 	}

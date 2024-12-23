@@ -83,7 +83,7 @@ func (h *User) Logout(c *gin.Context) {
 	if !validate.ValidateRequest(c, &request) {
 		return
 	}
-	logoutResponse, err := h.userService.Logout(request.AccessToken, request.RefreshToken)
+	logoutResponse, err := h.userService.Logout(c, request.AccessToken, request.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{
 			"status":  "error",

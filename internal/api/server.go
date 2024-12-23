@@ -1,6 +1,8 @@
 package httpServer
 
 import (
+	"net"
+
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
@@ -32,7 +34,16 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func (server *Server) Start(port string) {
-	if err := server.Engine.Run(":" + port); err != nil {
-		log.WithError(err).Error("service start failed")
+	listener, err := net.Listen("tcp4", "0.0.0.0:"+port)
+	if err != nil {
+		log.Fatal("Error starting server:", err)
 	}
+
+	if err := server.Engine.RunListener(listener); err != nil {
+		log.Printf("service start failed: %v", err)
+	}
+
+	/*if err := server.Engine.Run("0.0.0.0:" + port); err != nil {
+		log.WithError(err).Error("service start failed")
+	}*/
 }

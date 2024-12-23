@@ -22,7 +22,7 @@ type IUserService interface {
 	Login(ctx context.Context, loginForm model.Login) (*model.LoginResponse, error)
 	Register(ctx context.Context, registerForm model.Register) (*model.RegisterResponse, error)
 	RefreshToken(ctx context.Context, token string) (*model.RefreshToken, error)
-	Logout(accessToken, refreshToken string) (*map[string]string, error)
+	Logout(ctx context.Context, accessToken, refreshToken string) (*map[string]string, error)
 	CreateUserProfile(ctx context.Context, user_id string, userProfilePost *model.UserProfilePost) (any, error)
 	GetUserProfile(ctx context.Context, user_id string) (any, error)
 	UpdateUserProfile(ctx context.Context, user_id string, profilePut *model.UserProfilePut) (any, error)
@@ -105,8 +105,8 @@ func (s *UserService) Login(ctx context.Context, loginForm model.Login) (*model.
 	}, nil
 }
 
-func (s *UserService) Logout(accessToken, refreshToken string) (*map[string]string, error) {
-	if err := s.Authen.RevokeSession(accessToken, refreshToken); err != nil {
+func (s *UserService) Logout(ctx context.Context, accessToken, refreshToken string) (*map[string]string, error) {
+	if err := s.Authen.RevokeSession(ctx, accessToken, refreshToken); err != nil {
 		return nil, err
 	}
 	return &map[string]string{
@@ -116,7 +116,7 @@ func (s *UserService) Logout(accessToken, refreshToken string) (*map[string]stri
 }
 
 func (s *UserService) RefreshToken(ctx context.Context, token string) (*model.RefreshToken, error) {
-	refreshToken, err := s.Authen.ValidateToken(token, true)
+	refreshToken, err := s.Authen.ValidateToken(ctx, token, true)
 	if err != nil {
 		return nil, err
 	}

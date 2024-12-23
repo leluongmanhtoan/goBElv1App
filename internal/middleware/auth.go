@@ -36,7 +36,7 @@ func (m *AuthorMwd) RequestAuthorization() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		tokenClaims, err := m.authen.ValidateToken(authHeader, false)
+		tokenClaims, err := m.authen.ValidateToken(c, authHeader, false)
 		if err != nil {
 			c.JSON(
 				http.StatusUnauthorized,
