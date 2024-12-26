@@ -31,6 +31,10 @@ func NewNewsFeedAPI(engine *gin.Engine, service services.INewsfeedService) {
 		//interact newsfeed
 		Group.POST("posts/:postId/like", middleware.AuthMdw.RequestAuthorization(), handler.ToggleLikePost)
 		Group.GET("posts/:postId/like", handler.RetrieveLikers)
+
+		Group.POST("posts/:postId/comment", middleware.AuthMdw.RequestAuthorization(), handler.PostComment)
+		Group.GET("posts/:postId/comments", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveComments)
+		Group.PUT("posts/:postId/comment", middleware.AuthMdw.RequestAuthorization(), handler.PutComment)
 	}
 }
 
@@ -136,4 +140,74 @@ func (h *Newsfeed) RetrieveLikers(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, getResponse)
+}
+
+func (h *Newsfeed) PostComment(c *gin.Context) {
+	newcomment := new(model.CommentPost)
+	if !validate.ValidateRequest(c, newcomment) {
+		return
+	}
+	user_id, existed := c.Get("user_id")
+	if !existed {
+		c.JSON(response.BadRequest(errors.New("user_id not found")))
+		return
+	}
+	id := c.Param("postId")
+	if len(id) <= 0 {
+		c.JSON(response.BadRequest(errors.New("id is empty")))
+		return
+	}
+	insertResponse, err := h.service.PostComment(c, user_id.(string), id, newcomment)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]any{
+			"status":  "error",
+			"message": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, insertResponse)
+}
+
+func (h *Newsfeed) RetrieveComments(c *gin.Context) {
+	id := c.Param("postId")
+	if len(id) <= 0 {
+		c.JSON(response.BadRequest(errors.New("id is empty")))
+		return
+	}
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if err != nil {
+		c.JSON(response.BadRequest(errors.New("limit is a number")))
+		return
+	}
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil {
+		c.JSON(response.BadRequest(errors.New("offset is a number")))
+		return
+	}
+	getResponse, err := h.service.GetComments(c, limit, offset, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]any{
+			"status":  "error",
+			"message": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, getResponse)
+
+}
+
+func (h *Newsfeed) PutComment(c *gin.Context) {
+	commentPut := new(model.CommentPut)
+	if !validate.ValidateRequest(c, commentPut) {
+		return
+	}
+	putResponse, err := h.service.PutComment(c, commentPut)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]any{
+			"status":  "error",
+			"message": err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, putResponse)
 }

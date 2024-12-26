@@ -21,6 +21,14 @@ const (
 	LikeComment LikeType = "comment"
 )
 
+type CommentStatus string
+
+const (
+	ActiveComment  CommentStatus = "active"
+	HiddenComment  CommentStatus = "hidden"
+	DeletedComment CommentStatus = "deleted"
+)
+
 type Post struct {
 	bun.BaseModel `bun:"posts"`
 	PostId        string    `json:"id" bun:"postId,type:varchar(36),pk,notnull"`
@@ -33,6 +41,7 @@ type Post struct {
 	Deleted       int       `json:"deleted" bun:"deleted,type:tinyint,notnull"`
 	CreatedAt     time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
 	UpdatedAt     time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
+	Liked         bool      `json:"liked" bun:"liked,default:0"`
 }
 
 type NewsfeedPost struct {
@@ -41,6 +50,7 @@ type NewsfeedPost struct {
 }
 
 type NewsFeed struct {
+	PostId       string    `json:"postId" bun:"postId"`
 	AvatarUrl    string    `json:"avatarUrl" bun:"avatarUrl"`
 	FirstName    string    `json:"firstname" bun:"firstname"`
 	LastName     string    `json:"lastname" bun:"lastname"`
@@ -51,6 +61,7 @@ type NewsFeed struct {
 	ShareCount   int       `json:"shareCount" bun:"shareCount"`
 	CreatedAt    time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
 	UpdatedAt    time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
+	Liked        bool      `json:"liked" bun:"liked"`
 }
 
 type Like struct {
@@ -69,4 +80,37 @@ type LikerInfo struct {
 	FirstName string `json:"firstname" bun:"firstname"`
 	Lastname  string `json:"lastname" bun:"lastname"`
 	Avatar    string `json:"avatar" bun:"avatarUrl"`
+}
+
+type Comment struct {
+	bun.BaseModel `bun:"comments"`
+	CommentId     string        `json:"commentId" bun:"commentId,type:varchar(36),pk,notnull"`
+	PostId        string        `json:"postId" bun:"postId,type:varchar(36),notnull"`
+	UserId        string        `json:"userId" bun:"userId,type:varchar(36),notnull"`
+	ParentId      *string       `json:"parentId" bun:"parentId,type:varchar(36)"`
+	LikeCount     int           `json:"likeCount" bun:"likeCount"`
+	ReplyCount    int           `json:"repliesCount" bun:"repliesCount"`
+	Content       string        `json:"content" bun:"content,type:text,notnull"`
+	Status        CommentStatus `json:"status" bun:"status"`
+	CreatedAt     time.Time     `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
+	UpdatedAt     time.Time     `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
+}
+
+type CommentPost struct {
+	Content string `json:"content"`
+	Parent  string `json:"parent"`
+}
+
+type CommentInfo struct {
+	ProfileId string    `json:"profileId" bun:"profileId"`
+	FirstName string    `json:"firstname" bun:"firstname"`
+	Lastname  string    `json:"lastname" bun:"lastname"`
+	Avatar    string    `json:"avatar" bun:"avatarUrl"`
+	Content   string    `json:"content" bun:"content"`
+	CreatedAt time.Time `json:"createdAt" bun:"createdAt"`
+}
+
+type CommentPut struct {
+	CommentId string `json:"commentId"`
+	Content   string `json:"content"`
 }

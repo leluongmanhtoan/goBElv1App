@@ -16,8 +16,10 @@ type INewsfeedService interface {
 	GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error)
 	ToggleLikePost(ctx context.Context, user_id, post_id string) (any, error)
 	GetLikers(ctx context.Context, limit, offset int, post_id string) (any, error)
+	PostComment(ctx context.Context, user_id, post_id string, comment *model.CommentPost) (any, error)
+	GetComments(ctx context.Context, limit, offset int, post_id string) (any, error)
+	PutComment(ctx context.Context, commentPut *model.CommentPut) (any, error)
 }
-
 type NewsfeedService struct {
 	repo newsfeedRepo.INewsfeedRepo
 }
@@ -39,6 +41,7 @@ func (s *NewsfeedService) PostNewsfeed(ctx context.Context, user_id string, post
 		ShareCount:   0,
 		Deleted:      0,
 		CreatedAt:    time.Now(),
+		Liked:        false,
 	}
 	if err := s.repo.PostNews(ctx, newpost); err != nil {
 		return nil, err
@@ -50,8 +53,35 @@ func (s *NewsfeedService) PostNewsfeed(ctx context.Context, user_id string, post
 	}, nil
 }
 
+func (s *NewsfeedService) PostComment(ctx context.Context, user_id, post_id string, comment *model.CommentPost) (any, error) {
+	newcomment := &model.Comment{
+		CommentId:  uuid.NewString(),
+		UserId:     user_id,
+		PostId:     post_id,
+		ParentId:   nil,
+		LikeCount:  0,
+		ReplyCount: 0,
+		Content:    comment.Content,
+		Status:     model.ActiveComment,
+		CreatedAt:  time.Now(),
+	}
+
+	if comment.Parent != "" {
+		//Check parent is existed
+		newcomment.ParentId = &comment.Parent
+	}
+	if err := s.repo.CreateComment(ctx, newcomment); err != nil {
+		return nil, err
+	}
+	return &map[string]string{
+		"status":    "successful",
+		"commentId": newcomment.CommentId,
+		"message":   "your comment is created",
+	}, nil
+}
+
 func (s *NewsfeedService) GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error) {
-	newsfeed, err := s.repo.GetNewsfeed(ctx, limit, offset, user_id, true)
+	newsfeed, err := s.repo.GetNewsfeed(ctx, limit, offset, user_id)
 	if err != nil {
 		return nil, err
 	}
@@ -152,5 +182,30 @@ func (s *NewsfeedService) GetLikers(ctx context.Context, limit, offset int, post
 		"data":   likers,
 		"limit":  limit,
 		"offset": offset,
+	}, nil
+}
+
+func (s *NewsfeedService) GetComments(ctx context.Context, limit, offset int, post_id string) (any, error) {
+	comments, err := s.repo.GetComments(ctx, limit, offset, post_id)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(comments)
+	return &map[string]any{
+		"post_id": post_id,
+		"data":    comments,
+		"limit":   limit,
+		"offset":  offset,
+	}, nil
+}
+
+func (s *NewsfeedService) PutComment(ctx context.Context, commentPut *model.CommentPut) (any, error) {
+	err := s.repo.PutComment(ctx, commentPut.CommentId, commentPut.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &map[string]any{
+		"comment_id": commentPut.CommentId,
+		"message":    "modify comment successfully",
 	}, nil
 }
