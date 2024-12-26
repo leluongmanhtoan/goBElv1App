@@ -1,29 +1,34 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
-	server "program/api"
-	apiv1 "program/api/v1"
-	"program/internal/dbclient"
-	"program/middleware"
-	"program/repository"
-	"program/repository/db"
-	"program/service"
+	httpServer "program/internal/api"
+	apiv1 "program/internal/api/v1"
+	"program/internal/database"
+	"program/internal/middleware"
+
+	authenticationRepo "program/internal/repositories/auth"
+	newsfeedRepo "program/internal/repositories/newfeed"
+	relationshipsRepo "program/internal/repositories/relationships"
+	userRepo "program/internal/repositories/user"
+	"program/internal/services"
 
 	"github.com/joho/godotenv"
 )
 
+// Init unexported global variables
+var mySqlConn database.ISqlConnection
+var myRedisConn database.IRedisConnection
+
 func init() {
 	// Read .env file
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Load("./config/.env"); err != nil {
 		log.Fatalln("env file load failed")
 	}
 
 	// Create sql connection
-
-	sqlClientConfig := dbclient.SqlConfig{
+	sqlClientConfig := database.SqlConfig{
 		Host:         "localhost",
 		Port:         3306,
 		Database:     "testdb",
@@ -35,62 +40,64 @@ func init() {
 		MaxOpenConns: 10,
 	}
 
-	//Select sql connect to Mysql Database with config
-	repository.SqlClientConnection = &dbclient.MySqlClientConn{
-		SqlConfig: &sqlClientConfig,
-	}
-
-	//Run connect to Mysql database
-	err := repository.SqlClientConnection.Connect()
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = repository.SqlClientConnection.Ping()
-	if err != nil {
+	// Select sql connect to Mysql Database with config
+	mySqlConn = database.NewMySqlConnection(&sqlClientConfig)
+	// Run connect to Mysql database
+	if err := mySqlConn.Connect(); err != nil {
 		log.Fatal(err)
 	}
 
 	// Create redis connection
-	redisClientConfig := dbclient.RedisConfig{
+	redisClientConfig := database.RedisConfig{
 		Addr:     "localhost:6379",
 		Password: "ManhToan0123",
 		Database: 0,
 	}
-	//Select redis connect to Redis database with config
-	repository.RedisClientConnection = &dbclient.RedisClientConn{
-		RedisConfig: &redisClientConfig,
-		Ctx:         context.Background(),
-	}
+	// Select redis connect to Redis database with config
+	myRedisConn = database.NewRedisConnection(&redisClientConfig)
 
-	//Run connect to Redis database
-	repository.RedisClientConnection.Connect()
-	if err != nil {
+	// Run connect to Redis database
+	if err := myRedisConn.Connect(); err != nil {
 		log.Fatal(err)
 	}
-	//Ping Redis connect
-	err = repository.RedisClientConnection.Ping()
-	if err != nil {
-		log.Fatal(err)
-	}
+}
 
-	//Init repository
-	repository.UserRepo = db.NewUser()
+func setup() {
+
+	//Init service
 
 }
 func main() {
-	//Init http server
-	server := server.NewServer()
-
-	//Init password handler & JWT auth variable
-	passHandler := &service.PasswordHandler{SaltSize: 16}
-	auth := &service.JwtAuth{
+	// Init repository
+	authRepo := authenticationRepo.NewAuthenticationRepo(myRedisConn)
+	// Init auth repo config
+	PassHandler := &services.PasswordHandler{SaltSize: 16}
+	auth := &services.JwtAuthService{
 		SecretKey: os.Getenv("JWT_SECRET_KEY"),
-		Issuer:    os.Getenv("JWT_ISSUER")}
+		Issuer:    os.Getenv("JWT_ISSUER"),
+		Repo:      authRepo,
+	}
 
+	userRepo := userRepo.NewUserRepo(mySqlConn)
+	relationshipsRepo := relationshipsRepo.NewRelationshipsRepo(mySqlConn)
+	newsfeedRepo := newsfeedRepo.NewNewsfeedRepo(mySqlConn)
+
+	// Init service
+
+	userServices := services.NewUserService(userRepo, PassHandler, auth)
+	relationshipsService := services.NewRelationshipsService(relationshipsRepo)
+	newsfeedService := services.NewNewsFeedService(newsfeedRepo)
+
+	// Init middleware service
 	middleware.AuthMdw = middleware.NewAuthorMdw(auth)
-	//Init API collections
-	apiv1.NewUser(server.Engine, service.NewUser(passHandler, auth))
 
+	//Init http server
+	server := httpServer.NewServer()
+
+	//Init API collections
+	apiv1.NewUserAPI(server.Engine, userServices)
+	apiv1.NewRelationshipsAPI(server.Engine, relationshipsService)
+	apiv1.NewNewsFeedAPI(server.Engine, newsfeedService)
 	//Start http server
 	server.Start("8080")
 }
