@@ -8,6 +8,7 @@ import (
 
 type AuthenticationRepo struct {
 	rd database.IRedisConnection
+	db database.ISqlConnection
 }
 
 func NewAuthenticationRepo(rd database.IRedisConnection) IAuthenticationRepo {
@@ -16,6 +17,7 @@ func NewAuthenticationRepo(rd database.IRedisConnection) IAuthenticationRepo {
 	}
 }
 
+// Redis
 func (r *AuthenticationRepo) AddValidRefreshToken(ctx context.Context, userId, tokenId string, ttl time.Duration) error {
 	_, err := r.rd.GetDB().Set(ctx, "refresh:"+tokenId, "userId:"+userId, ttl).Result()
 	if err != nil {

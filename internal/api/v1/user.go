@@ -30,7 +30,7 @@ func NewUserAPI(engine *gin.Engine, userSerivce services.IUserService) {
 		Group.POST("auth/logout", handler.Logout)
 		Group.POST("auth/refresh", handler.RefeshToken)
 		Group.POST("auth/validate", middleware.AuthMdw.RequestAuthorization(), func(c *gin.Context) {
-			user_id, existed := c.Get("user_id")
+			user_id, existed := c.Get("userId")
 			if !existed {
 				c.JSON(response.BadRequest(errors.New("user_id not found")))
 				return

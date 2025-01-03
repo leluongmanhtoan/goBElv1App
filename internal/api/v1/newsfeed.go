@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type Newsfeed struct {
@@ -21,125 +22,130 @@ func NewNewsFeedAPI(engine *gin.Engine, service services.INewsfeedService) {
 	handler := &Newsfeed{
 		service: service,
 	}
-	Group := engine.Group("api/v1")
+	Group := engine.Group("api/v1/newsfeed")
 	{
 		//newsfeed
-		Group.POST("posts", middleware.AuthMdw.RequestAuthorization(), handler.PostNewsFeed)
-		Group.GET("user/:id/posts", middleware.AuthMdw.RequestAuthorization())
-		Group.GET("user/following/posts", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveNewsfeed)
+		Group.GET("", middleware.AuthMdw.RequestAuthorization(), handler.GetNewsfeed)
+		Group.POST("post", middleware.AuthMdw.RequestAuthorization(), handler.CreatePost)
+		Group.PATCH("post/:id", middleware.AuthMdw.RequestAuthorization())
+		Group.DELETE("post/:id", middleware.AuthMdw.RequestAuthorization())
+
+		//Group.GET("user/:id/posts", middleware.AuthMdw.RequestAuthorization())
 
 		//interact newsfeed
-		Group.POST("posts/:postId/like", middleware.AuthMdw.RequestAuthorization(), handler.ToggleLikePost)
-		Group.GET("posts/:postId/like", handler.RetrieveLikers)
+		Group.POST("post/:postId/like", middleware.AuthMdw.RequestAuthorization(), handler.ToggleLikePost)
+		Group.GET("post/:postId/like", middleware.AuthMdw.RequestNoRequiredAuthorization(), handler.GetLikers)
 
-		Group.POST("posts/:postId/comment", middleware.AuthMdw.RequestAuthorization(), handler.PostComment)
-		Group.GET("posts/:postId/comments", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveComments)
-		Group.PUT("posts/:postId/comment", middleware.AuthMdw.RequestAuthorization(), handler.PutComment)
+		Group.POST("post/:postId/comment", middleware.AuthMdw.RequestAuthorization(), handler.PostComment)
+		Group.PUT("post/:postId/comment", middleware.AuthMdw.RequestAuthorization(), handler.PutComment)
+		Group.GET("post/:postId/comments", middleware.AuthMdw.RequestAuthorization(), handler.RetrieveComments)
+
 	}
 }
 
-func (h *Newsfeed) PostNewsFeed(c *gin.Context) {
+func (h *Newsfeed) CreatePost(c *gin.Context) {
 	newpost := new(model.NewsfeedPost)
 	if !validate.ValidateRequest(c, newpost) {
 		return
 	}
-	user_id, existed := c.Get("user_id")
-	if !existed {
-		c.JSON(response.BadRequest(errors.New("user_id not found")))
+	userId, existed := c.Get("userId")
+	if !existed || userId == "" {
+		response.ErrorResponse[string](c, http.StatusBadRequest, "user id not found")
 		return
 	}
-	insertResponse, err := h.service.PostNewsfeed(c, user_id.(string), newpost)
+	mypost, err := h.service.CreatePost(c, userId.(string), newpost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{
-			"status":  "error",
-			"message": err.Error(),
-		})
+		response.ErrorResponse[string](c, http.StatusInternalServerError, "can not create a new post")
 		return
 	}
-	c.JSON(http.StatusOK, insertResponse)
+
+	response.SuccessResponse(c, "create post successfully", mypost)
 }
 
-func (h *Newsfeed) RetrieveNewsfeed(c *gin.Context) {
-	user_id, existed := c.Get("user_id")
-	if !existed {
-		c.JSON(response.BadRequest(errors.New("user_id not found")))
+func (h *Newsfeed) GetNewsfeed(c *gin.Context) {
+	userId, existed := c.Get("userId")
+	if !existed || userId == "" {
+		response.ErrorResponse[string](c, http.StatusBadRequest, "user id not found")
 		return
 	}
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if err != nil {
-		c.JSON(response.BadRequest(errors.New("limit is a number")))
+		response.ErrorResponse[string](c, http.StatusBadRequest, "limit is a number")
 		return
 	}
 	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	if err != nil {
-		c.JSON(response.BadRequest(errors.New("offset is a number")))
+		response.ErrorResponse[string](c, http.StatusBadRequest, "offset is a number")
 		return
 	}
-	getResponse, err := h.service.GetNewsfeed(c, limit, offset, user_id.(string))
+	newsfeed, err := h.service.GetNewsfeed(c, limit, offset, userId.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{
-			"status":  "error",
-			"message": err.Error(),
-		})
+		response.ErrorResponse[string](c, http.StatusInternalServerError, "can not get newsfeed")
 		return
 	}
-	c.JSON(http.StatusOK, getResponse)
+	response.SuccessResponseWithPagination(c, limit, offset, userId.(string), newsfeed)
 
 }
 
 func (h *Newsfeed) ToggleLikePost(c *gin.Context) {
-	user_id, existed := c.Get("user_id")
-	if !existed {
-		c.JSON(response.BadRequest(errors.New("user_id not found")))
+	userId, existed := c.Get("userId")
+	if !existed || userId == "" {
+		response.ErrorResponse[string](c, http.StatusBadRequest, "user id not found")
 		return
 	}
-	id := c.Param("postId")
-	if len(id) <= 0 {
-		c.JSON(response.BadRequest(errors.New("id is empty")))
+	postId := c.Param("postId")
+	if postId == "" {
+		response.ErrorResponse[string](c, http.StatusBadRequest, "post id can not be empty")
 		return
 	}
-	toggleResponse, err := h.service.ToggleLikePost(c, user_id.(string), id)
+	if _, err := uuid.Parse(postId); err != nil {
+		response.ErrorResponse[string](c, http.StatusBadRequest, "post id is not a valid UUID")
+		return
+	}
+	err := h.service.ToggleLikePost(c, userId.(string), postId)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{
-			"status":  "error",
-			"message": err.Error(),
-		})
+		response.ErrorResponse[string](c, http.StatusInternalServerError, "can not toggle like or unlike")
 		return
 	}
-	c.JSON(http.StatusOK, toggleResponse)
+	response.SuccessResponse(c, "toggle like post successfully", "")
 }
 
-func (h *Newsfeed) RetrieveLikers(c *gin.Context) {
-	//user_id, existed := c.Get("user_id")
-	id := c.Param("postId")
-	if len(id) <= 0 {
-		c.JSON(response.BadRequest(errors.New("id is empty")))
+func (h *Newsfeed) GetLikers(c *gin.Context) {
+	userId, existed := c.Get("userId")
+	if !existed || userId == "" {
+		userId = "guest"
+	}
+	postId := c.Param("postId")
+	if postId == "" {
+		response.ErrorResponse[string](c, http.StatusBadRequest, "post id can not be empty")
 		return
 	}
-	limit, err := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	if err != nil {
-		c.JSON(response.BadRequest(errors.New("limit is a number")))
+		response.ErrorResponse[string](c, http.StatusBadRequest, "limit is a number")
 		return
 	}
 	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	if err != nil {
-		c.JSON(response.BadRequest(errors.New("offset is a number")))
+		response.ErrorResponse[string](c, http.StatusBadRequest, "offset is a number")
 		return
 	}
 
-	//Note: Yeu cau thuc hien logic kiem tra xem user hien tai co duoc nguoi khac cho phep lay danh sach khong
-	/*if user_id != id{
-
-	}*/
-	getResponse, err := h.service.GetLikers(c, limit, offset, id)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{
-			"status":  "error",
-			"message": err.Error(),
-		})
-		return
+	if userId == "guest" {
+		likers, err := h.service.GetLikers(c, limit, offset, userId.(string), postId, true)
+		if err != nil {
+			response.ErrorResponse[string](c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.SuccessResponseWithPagination(c, limit, offset, userId.(string), likers)
+	} else {
+		likers, err := h.service.GetLikers(c, limit, offset, userId.(string), postId, false)
+		if err != nil {
+			response.ErrorResponse[string](c, http.StatusInternalServerError, err.Error())
+			return
+		}
+		response.SuccessResponseWithPagination(c, limit, offset, userId.(string), likers)
 	}
-	c.JSON(http.StatusOK, getResponse)
 }
 
 func (h *Newsfeed) PostComment(c *gin.Context) {
@@ -147,7 +153,7 @@ func (h *Newsfeed) PostComment(c *gin.Context) {
 	if !validate.ValidateRequest(c, newcomment) {
 		return
 	}
-	user_id, existed := c.Get("user_id")
+	user_id, existed := c.Get("userId")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
 		return

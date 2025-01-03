@@ -7,6 +7,7 @@ import (
 	apiv1 "program/internal/api/v1"
 	"program/internal/database"
 	"program/internal/middleware"
+	"strconv"
 
 	authenticationRepo "program/internal/repositories/auth"
 	newsfeedRepo "program/internal/repositories/newfeed"
@@ -27,13 +28,14 @@ func init() {
 		log.Fatalln("env file load failed")
 	}
 
+	port, _ := strconv.Atoi(os.Getenv("SQLPort"))
 	// Create sql connection
 	sqlClientConfig := database.SqlConfig{
-		Host:         "localhost",
-		Port:         3306,
-		Database:     "testdb",
-		Username:     "root",
-		Password:     "ManhToan0123!",
+		Host:         os.Getenv("SQLHost"),
+		Port:         port,
+		Database:     os.Getenv("SQLDb"),
+		Username:     os.Getenv("SQLUser"),
+		Password:     os.Getenv("SQLPass"),
 		ReadTimeout:  30,
 		WriteTimeout: 30,
 		MaxIdleConns: 10,
@@ -49,8 +51,8 @@ func init() {
 
 	// Create redis connection
 	redisClientConfig := database.RedisConfig{
-		Addr:     "localhost:6379",
-		Password: "ManhToan0123",
+		Addr:     os.Getenv("RedisHost"),
+		Password: os.Getenv("RedisPass"),
 		Database: 0,
 	}
 	// Select redis connect to Redis database with config
