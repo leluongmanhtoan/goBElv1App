@@ -155,7 +155,7 @@ func (h *Newsfeed) PostComment(c *gin.Context) {
 	}
 	user_id, existed := c.Get("userId")
 	if !existed {
-		c.JSON(response.BadRequest(errors.New("user_id not found")))
+		c.JSON(response.BadRequest(errors.New("user id not found")))
 		return
 	}
 	id := c.Param("postId")
@@ -163,15 +163,12 @@ func (h *Newsfeed) PostComment(c *gin.Context) {
 		c.JSON(response.BadRequest(errors.New("id is empty")))
 		return
 	}
-	insertResponse, err := h.service.PostComment(c, user_id.(string), id, newcomment)
+	mycomment, err := h.service.PostComment(c, user_id.(string), id, newcomment)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{
-			"status":  "error",
-			"message": err.Error(),
-		})
+		response.ErrorResponse[string](c, http.StatusInternalServerError, "can not create a new comment")
 		return
 	}
-	c.JSON(http.StatusOK, insertResponse)
+	response.SuccessResponse(c, "create post successfully", mycomment)
 }
 
 func (h *Newsfeed) RetrieveComments(c *gin.Context) {

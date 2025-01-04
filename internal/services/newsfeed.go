@@ -63,14 +63,8 @@ func (s *NewsfeedService) PostComment(ctx context.Context, user_id, post_id stri
 		//Check parent is existed
 		newcomment.ParentId = &comment.Parent
 	}
-	if err := s.repo.CreateComment(ctx, newcomment); err != nil {
-		return nil, err
-	}
-	return &map[string]string{
-		"status":    "successful",
-		"commentId": newcomment.CommentId,
-		"message":   "your comment is created",
-	}, nil
+	mycomment, err := s.repo.CreateComment(ctx, newcomment)
+	return mycomment, err
 }
 
 func (s *NewsfeedService) GetNewsfeed(ctx context.Context, limit, offset int, userId string) (any, error) {

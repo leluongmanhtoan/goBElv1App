@@ -31,6 +31,9 @@ func (r *NewsfeedRepo) CreatePost(ctx context.Context, post *model.Post) (*model
 	_, err := r.db.GetDB().NewInsert().
 		Model(post).
 		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
 	myPost := new(model.NewsFeed)
 	myQuery := r.db.GetDB().NewSelect().
 		Column(
@@ -258,23 +261,48 @@ func (r *NewsfeedRepo) CheckFriendPrivacyPermission(ctx context.Context, userId 
 	}
 	return nil
 }
-func (r *NewsfeedRepo) CreateComment(ctx context.Context, commentPost *model.Comment) error {
+func (r *NewsfeedRepo) CreateComment(ctx context.Context, commentPost *model.Comment) (*model.CommentInfo, error) {
 	_, err := r.db.GetDB().NewInsert().
 		Model(commentPost).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	myComment := new(model.CommentInfo)
+	myQuery := r.db.GetDB().NewSelect().
+		Column(
+			"c.commentId",
+			"pf.profileId",
+			"pf.firstname",
+			"pf.lastname",
+			"pf.avatarUrl",
+			"c.content",
+			"c.createdAt").
+		TableExpr("comments as c").
+		Join("JOIN profiles pf ON pf.userId = c.userId").
+		Where("c.commentId = ?", commentPost.CommentId)
+	err = myQuery.Scan(ctx, myComment)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return myComment, nil
+		}
+		return nil, err
+	}
+	return myComment, nil
 }
 
 func (r *NewsfeedRepo) GetComments(ctx context.Context, limit, offset int, postId string) (*[]model.CommentInfo, error) {
 	comments := new([]model.CommentInfo)
 	query := r.db.GetDB().NewSelect().
-		Column("p.profileId", "p.firstname", "p.lastname", "p.avatarUrl", "c.createdAt", "c.content").
+		Column("c.commentId", "p.profileId", "p.firstname", "p.lastname", "p.avatarUrl", "c.createdAt", "c.content").
 		TableExpr("comments as c").
 		Join("JOIN profiles p ON p.userId = c.userId").
-		Where("c.postId = ?", postId)
+		Where("c.postId = ?", postId).
+		OrderExpr("createdAt DESC")
 	if limit > 0 {
 		query.Limit(limit).Offset(offset)
 	}
+
 	err := query.Scan(ctx, comments)
 	if err != nil {
 		if err == sql.ErrNoRows {

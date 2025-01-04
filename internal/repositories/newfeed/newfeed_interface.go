@@ -21,7 +21,7 @@ type INewsfeedRepo interface {
 	GetLikers(ctx context.Context, limit, offset int, post_id string) (*[]model.LikerInfo, error)
 	CheckPublicPrivacyPermission(ctx context.Context, postId string) error
 	CheckFriendPrivacyPermission(ctx context.Context, userId string, postId string) error
-	CreateComment(ctx context.Context, commentPost *model.Comment) error
+	CreateComment(ctx context.Context, commentPost *model.Comment) (*model.CommentInfo, error)
 	GetComments(ctx context.Context, limit, offset int, postId string) (*[]model.CommentInfo, error)
 	IsOwnPost(ctx context.Context, post_id, user_id string) (bool, error)
 	SetOwnerLikedStatus(ctx context.Context, tx *bun.Tx, postId string, status bool) error

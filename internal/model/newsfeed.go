@@ -101,6 +101,7 @@ type CommentPost struct {
 }
 
 type CommentInfo struct {
+	CommentId string    `json:"commentId" bun:"commentId"`
 	ProfileId string    `json:"profileId" bun:"profileId"`
 	FirstName string    `json:"firstname" bun:"firstname"`
 	Lastname  string    `json:"lastname" bun:"lastname"`
