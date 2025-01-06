@@ -35,7 +35,7 @@ type UserProfilePost struct {
 type UserProfilePut struct {
 	FirstName   string `json:"firstname"`
 	LastName    string `json:"lastname"`
-	Gender      *int   `json:"gender" validate:"oneof=0 1 2"`
+	Gender      *int   `json:"gender"`
 	Avatar      string `json:"avatarUrl"`
 	Address     string `json:"address"`
 	Email       string `json:"email"`

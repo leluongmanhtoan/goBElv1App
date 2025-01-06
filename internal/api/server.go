@@ -13,6 +13,7 @@ type Server struct {
 
 func NewServer() *Server {
 	engine := gin.New()
+	engine.Static("/uploads", "./uploads")
 	engine.Use(gin.Recovery())
 	engine.Use(CORSMiddleware())
 	server := &Server{Engine: engine}
