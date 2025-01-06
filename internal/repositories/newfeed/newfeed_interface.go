@@ -26,4 +26,7 @@ type INewsfeedRepo interface {
 	IsOwnPost(ctx context.Context, post_id, user_id string) (bool, error)
 	SetOwnerLikedStatus(ctx context.Context, tx *bun.Tx, postId string, status bool) error
 	PutComment(ctx context.Context, commentId string, content string) error
+
+	//Redis Cache
+	SaveNewsfeedCache(ctx context.Context, key string, newsfeed *[]model.NewsFeed) error
 }
