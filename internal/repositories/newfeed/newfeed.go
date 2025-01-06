@@ -27,11 +27,38 @@ func (r *NewsfeedRepo) GetDBTx(ctx context.Context) (*bun.Tx, error) {
 	return &tx, err
 }
 
-func (r *NewsfeedRepo) PostNews(ctx context.Context, post *model.Post) error {
+func (r *NewsfeedRepo) CreatePost(ctx context.Context, post *model.Post) (*model.NewsFeed, error) {
 	_, err := r.db.GetDB().NewInsert().
 		Model(post).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	myPost := new(model.NewsFeed)
+	myQuery := r.db.GetDB().NewSelect().
+		Column(
+			"p.postId",
+			"pf.avatarUrl",
+			"pf.firstname",
+			"pf.lastname",
+			"p.content",
+			"p.privacy",
+			"p.likeCount",
+			"p.commentCount",
+			"p.shareCount",
+			"p.createdAt",
+			"p.updatedAt").
+		TableExpr("posts as p").
+		Join("JOIN profiles pf ON pf.userId = p.userId").
+		Where("p.postId = ?", post.PostId)
+	err = myQuery.Scan(ctx, myPost)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return myPost, nil
+		}
+		return nil, err
+	}
+	return myPost, nil
 }
 
 func (r *NewsfeedRepo) GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (*[]model.NewsFeed, error) {
@@ -49,12 +76,12 @@ func (r *NewsfeedRepo) GetNewsfeed(ctx context.Context, limit, offset int, user_
 			"p.shareCount",
 			"p.createdAt",
 			"p.updatedAt").
-		ColumnExpr("IF(l.postId IS NOT NULL,TRUE,FALSE) AS liked").
+		ColumnExpr("IF(l.postId IS NOT NULL AND l.isActive = 1,TRUE,FALSE) AS liked").
 		TableExpr("follows as f").
 		Join("JOIN profiles pf ON pf.userId = f.followingId").
 		Join("JOIN posts p ON p.userId = f.followingId").
 		Join("LEFT JOIN likes l ON l.postId = p.postId AND l.userId = ?", user_id).
-		Where("f.followerId = ? AND deleted = 0 AND p.createdAt >= NOW() - INTERVAL 7 DAY", user_id)
+		Where("f.followerId = ? AND f.isActive = 1 AND p.deleted = 0 AND p.createdAt >= NOW() - INTERVAL 7 DAY AND (f.isMutual = 1 OR p.privacy = 'public')", user_id)
 
 	myQuery := r.db.GetDB().NewSelect().
 		Column(
@@ -69,11 +96,11 @@ func (r *NewsfeedRepo) GetNewsfeed(ctx context.Context, limit, offset int, user_
 			"p.shareCount",
 			"p.createdAt",
 			"p.updatedAt").
-		ColumnExpr("IF(l.postId IS NOT NULL,TRUE,FALSE) AS liked").
+		ColumnExpr("IF(l.postId IS NOT NULL AND l.isActive = 1,TRUE,FALSE) AS liked").
 		TableExpr("posts as p").
 		Join("JOIN profiles pf ON pf.userId = p.userId").
 		Join("LEFT JOIN likes l ON l.postId = p.postId AND l.userId = ?", user_id).
-		Where("p.userId = ? AND deleted = 0 AND p.createdAt >= NOW() - INTERVAL 7 DAY", user_id)
+		Where("p.userId = ? AND p.deleted = 0 AND p.createdAt >= NOW() - INTERVAL 7 DAY", user_id)
 
 	unionQuery := r.db.GetDB().NewSelect().With("others", othersQuery).With("mine", myQuery).TableExpr("(SELECT * FROM others UNION ALL SELECT * FROM mine) AS newsfeed").
 		OrderExpr("createdAt DESC")
@@ -187,7 +214,6 @@ func (r *NewsfeedRepo) GetLikers(ctx context.Context, limit, offset int, post_id
 		Join("JOIN profiles p ON p.userId=l.userId").
 		Where("postId = ? AND isActive = 1", post_id).
 		Order("p.lastname ASC")
-
 	if limit > 0 {
 		query.Limit(limit).Offset(offset)
 	}
@@ -201,23 +227,82 @@ func (r *NewsfeedRepo) GetLikers(ctx context.Context, limit, offset int, post_id
 	return likers, nil
 }
 
-func (r *NewsfeedRepo) CreateComment(ctx context.Context, commentPost *model.Comment) error {
+func (r *NewsfeedRepo) CheckPublicPrivacyPermission(ctx context.Context, postId string) error {
+	post := new(model.Post)
+	query := r.db.GetDB().NewSelect().
+		Model(post).Where("postId = ?", postId)
+	if err := query.Scan(ctx, post); err != nil {
+		return err
+	}
+
+	if post.Privacy != "public" {
+		return errors.New("you don't have permission to get likers in this post")
+	}
+	return nil
+}
+
+func (r *NewsfeedRepo) CheckFriendPrivacyPermission(ctx context.Context, userId string, postId string) error {
+	post := new(model.Post)
+	query := r.db.GetDB().NewSelect().Model(post).Where("postId = ?", postId)
+	if err := query.Scan(ctx, post); err != nil {
+		return err
+	}
+	if post.Privacy == "public" {
+		return nil
+	}
+	friendCheck, err := r.db.GetDB().NewSelect().
+		TableExpr("follows as f").
+		Where("f.followerId = ? AND f.followingId = ? AND isMutual = 1", post.UserId, userId).Exists(ctx)
+	if err != nil {
+		return err
+	}
+	if userId != post.UserId && friendCheck == false {
+		return errors.New("you don't have permission to get likers in this post")
+	}
+	return nil
+}
+func (r *NewsfeedRepo) CreateComment(ctx context.Context, commentPost *model.Comment) (*model.CommentInfo, error) {
 	_, err := r.db.GetDB().NewInsert().
 		Model(commentPost).
 		Exec(ctx)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	myComment := new(model.CommentInfo)
+	myQuery := r.db.GetDB().NewSelect().
+		Column(
+			"c.commentId",
+			"pf.profileId",
+			"pf.firstname",
+			"pf.lastname",
+			"pf.avatarUrl",
+			"c.content",
+			"c.createdAt").
+		TableExpr("comments as c").
+		Join("JOIN profiles pf ON pf.userId = c.userId").
+		Where("c.commentId = ?", commentPost.CommentId)
+	err = myQuery.Scan(ctx, myComment)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return myComment, nil
+		}
+		return nil, err
+	}
+	return myComment, nil
 }
 
 func (r *NewsfeedRepo) GetComments(ctx context.Context, limit, offset int, postId string) (*[]model.CommentInfo, error) {
 	comments := new([]model.CommentInfo)
 	query := r.db.GetDB().NewSelect().
-		Column("p.profileId", "p.firstname", "p.lastname", "p.avatarUrl", "c.createdAt", "c.content").
+		Column("c.commentId", "p.profileId", "p.firstname", "p.lastname", "p.avatarUrl", "c.createdAt", "c.content").
 		TableExpr("comments as c").
 		Join("JOIN profiles p ON p.userId = c.userId").
-		Where("c.postId = ?", postId)
+		Where("c.postId = ?", postId).
+		OrderExpr("createdAt DESC")
 	if limit > 0 {
 		query.Limit(limit).Offset(offset)
 	}
+
 	err := query.Scan(ctx, comments)
 	if err != nil {
 		if err == sql.ErrNoRows {

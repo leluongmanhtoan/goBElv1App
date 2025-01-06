@@ -6,6 +6,7 @@ import (
 )
 
 type IAuthenticationRepo interface {
+	//Redis
 	AddValidRefreshToken(ctx context.Context, userId, tokenId string, ttl time.Duration) error
 	AddAccessToBlacklist(ctx context.Context, accessToken string, ttl time.Duration) error
 	IsExisted(ctx context.Context, key string) (bool, error)

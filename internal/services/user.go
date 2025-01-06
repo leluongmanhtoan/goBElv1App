@@ -3,10 +3,14 @@ package services
 import (
 	"context"
 	"errors"
+	"mime/multipart"
+	"os"
+	"path/filepath"
 	"program/internal/model"
 	userRepo "program/internal/repositories/user"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -26,6 +30,7 @@ type IUserService interface {
 	CreateUserProfile(ctx context.Context, user_id string, userProfilePost *model.UserProfilePost) (any, error)
 	GetUserProfile(ctx context.Context, user_id string) (any, error)
 	UpdateUserProfile(ctx context.Context, user_id string, profilePut *model.UserProfilePut) (any, error)
+	UploadAvatar(ctx *gin.Context, fileUploaded *multipart.FileHeader, filename string) (string, error)
 }
 
 type UserService struct {
@@ -200,4 +205,17 @@ func (s *UserService) UpdateUserProfile(ctx context.Context, user_id string, pro
 		return nil, err
 	}
 	return profile, nil
+}
+
+func (s *UserService) UploadAvatar(ctx *gin.Context, fileUploaded *multipart.FileHeader, filename string) (string, error) {
+	uploadPath := "./uploads/"
+	if _, err := os.Stat(uploadPath); os.IsNotExist(err) {
+		os.MkdirAll(uploadPath, os.ModePerm)
+	}
+
+	fullfilename := filepath.Join(uploadPath, filename)
+	if err := ctx.SaveUploadedFile(fileUploaded, fullfilename); err != nil {
+		return "", err
+	}
+	return fullfilename, nil
 }

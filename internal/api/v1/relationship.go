@@ -30,7 +30,7 @@ func NewRelationshipsAPI(engine *gin.Engine, relationshipsService services.IRela
 }
 func (h *Relationships) RetrieveNumberOfFollowRelationship(c *gin.Context) {
 	//user_id, existed := c.Get("user_id")
-	_, existed := c.Get("user_id")
+	_, existed := c.Get("userId")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
 		return
@@ -58,7 +58,7 @@ func (h *Relationships) RetrieveNumberOfFollowRelationship(c *gin.Context) {
 
 func (h *Relationships) RetrieveFollowers(c *gin.Context) {
 	//user_id, existed := c.Get("user_id")
-	_, existed := c.Get("user_id")
+	_, existed := c.Get("userId")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
 		return
@@ -96,7 +96,7 @@ func (h *Relationships) RetrieveFollowers(c *gin.Context) {
 
 func (h *Relationships) RetrieveFollowing(c *gin.Context) {
 	//user_id, existed := c.Get("user_id")
-	_, existed := c.Get("user_id")
+	_, existed := c.Get("userId")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
 		return
@@ -139,7 +139,7 @@ func (h *Relationships) ToggleFollow(c *gin.Context) {
 	if !validate.ValidateRequest(c, &request) {
 		return
 	}
-	user_id, existed := c.Get("user_id")
+	user_id, existed := c.Get("userId")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
 		return

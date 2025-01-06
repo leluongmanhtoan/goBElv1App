@@ -12,10 +12,10 @@ import (
 )
 
 type INewsfeedService interface {
-	PostNewsfeed(ctx context.Context, user_id string, post *model.NewsfeedPost) (any, error)
+	CreatePost(ctx context.Context, user_id string, post *model.NewsfeedPost) (any, error)
 	GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error)
-	ToggleLikePost(ctx context.Context, user_id, post_id string) (any, error)
-	GetLikers(ctx context.Context, limit, offset int, post_id string) (any, error)
+	ToggleLikePost(ctx context.Context, userId, postId string) error
+	GetLikers(ctx context.Context, limit, offset int, userId, post_id string, isGuestUser bool) (any, error)
 	PostComment(ctx context.Context, user_id, post_id string, comment *model.CommentPost) (any, error)
 	GetComments(ctx context.Context, limit, offset int, post_id string) (any, error)
 	PutComment(ctx context.Context, commentPut *model.CommentPut) (any, error)
@@ -30,10 +30,10 @@ func NewNewsFeedService(repo newsfeedRepo.INewsfeedRepo) INewsfeedService {
 	}
 }
 
-func (s *NewsfeedService) PostNewsfeed(ctx context.Context, user_id string, post *model.NewsfeedPost) (any, error) {
+func (s *NewsfeedService) CreatePost(ctx context.Context, userId string, post *model.NewsfeedPost) (any, error) {
 	newpost := &model.Post{
 		PostId:       uuid.NewString(),
-		UserId:       user_id,
+		UserId:       userId,
 		Content:      post.Content,
 		Privacy:      post.Privacy,
 		LikeCount:    0,
@@ -41,16 +41,9 @@ func (s *NewsfeedService) PostNewsfeed(ctx context.Context, user_id string, post
 		ShareCount:   0,
 		Deleted:      0,
 		CreatedAt:    time.Now(),
-		Liked:        false,
 	}
-	if err := s.repo.PostNews(ctx, newpost); err != nil {
-		return nil, err
-	}
-	return &map[string]string{
-		"status":  "successful",
-		"postId":  newpost.PostId,
-		"message": "your post is created",
-	}, nil
+	mypost, err := s.repo.CreatePost(ctx, newpost)
+	return mypost, err
 }
 
 func (s *NewsfeedService) PostComment(ctx context.Context, user_id, post_id string, comment *model.CommentPost) (any, error) {
@@ -70,119 +63,105 @@ func (s *NewsfeedService) PostComment(ctx context.Context, user_id, post_id stri
 		//Check parent is existed
 		newcomment.ParentId = &comment.Parent
 	}
-	if err := s.repo.CreateComment(ctx, newcomment); err != nil {
-		return nil, err
-	}
-	return &map[string]string{
-		"status":    "successful",
-		"commentId": newcomment.CommentId,
-		"message":   "your comment is created",
-	}, nil
+	mycomment, err := s.repo.CreateComment(ctx, newcomment)
+	return mycomment, err
 }
 
-func (s *NewsfeedService) GetNewsfeed(ctx context.Context, limit, offset int, user_id string) (any, error) {
-	newsfeed, err := s.repo.GetNewsfeed(ctx, limit, offset, user_id)
+func (s *NewsfeedService) GetNewsfeed(ctx context.Context, limit, offset int, userId string) (any, error) {
+	newsfeed, err := s.repo.GetNewsfeed(ctx, limit, offset, userId)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(newsfeed)
-	return &map[string]any{
-		"userId": user_id,
-		"data":   newsfeed,
-		"limit":  limit,
-		"offset": offset,
-	}, nil
+	return newsfeed, nil
 }
 
-func (s *NewsfeedService) ToggleLikePost(ctx context.Context, user_id, post_id string) (any, error) {
+func (s *NewsfeedService) ToggleLikePost(ctx context.Context, userId, postId string) error {
 	tx, err := s.repo.GetDBTx(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() {
 		if err != nil {
 			tx.Rollback()
 		}
 	}()
-	postExisted, err := s.repo.IsPostExisted(ctx, post_id)
+	postExisted, err := s.repo.IsPostExisted(ctx, postId)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !postExisted {
-		return nil, errors.New("postId not found")
+		return errors.New("this post was not found")
 	}
-	exists, err := s.repo.IsLikeExisted(ctx, post_id, user_id)
+	likeExisted, err := s.repo.IsLikeExisted(ctx, postId, userId)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if !exists {
+	if !likeExisted {
 		newlike := &model.Like{
 			LikeId:    uuid.NewString(),
-			PostId:    post_id,
-			UserId:    user_id,
+			PostId:    postId,
+			UserId:    userId,
 			Type:      model.LikePost,
 			IsActive:  true,
 			CreatedAt: time.Now(),
 		}
 		err := s.repo.CreateLike(ctx, tx, newlike)
 		if err != nil {
-			tx.Rollback()
-			return nil, err
+			return err
 		}
-		err = s.repo.IncreaseLikeCount(ctx, tx, post_id)
+		err = s.repo.IncreaseLikeCount(ctx, tx, postId)
 		if err != nil {
-			tx.Rollback()
-			return nil, err
+			return err
 		}
 	} else {
-		isActive, err := s.repo.IsActiveLike(ctx, post_id, user_id)
+		isActive, err := s.repo.IsActiveLike(ctx, postId, userId)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if isActive {
-			err = s.repo.UpdateLikeTransaction(ctx, tx, user_id, post_id, false)
+			err = s.repo.UpdateLikeTransaction(ctx, tx, userId, postId, false)
 			if err != nil {
-				tx.Rollback()
-				return nil, err
+				return err
 			}
-			err = s.repo.DecreaseLikeCount(ctx, tx, post_id)
+			err = s.repo.DecreaseLikeCount(ctx, tx, postId)
 			if err != nil {
-				tx.Rollback()
-				return nil, err
+				return err
 			}
 		} else {
-			err = s.repo.UpdateLikeTransaction(ctx, tx, user_id, post_id, true)
+			err = s.repo.UpdateLikeTransaction(ctx, tx, userId, postId, true)
 			if err != nil {
-				tx.Rollback()
-				return nil, err
+				return err
 			}
-			err = s.repo.IncreaseLikeCount(ctx, tx, post_id)
+			err = s.repo.IncreaseLikeCount(ctx, tx, postId)
 			if err != nil {
-				tx.Rollback()
-				return nil, err
+				return err
 			}
 		}
 	}
 	err = tx.Commit()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &map[string]any{
-		"status": "successful",
-	}, nil
-
+	return nil
 }
 
-func (s *NewsfeedService) GetLikers(ctx context.Context, limit, offset int, post_id string) (any, error) {
+func (s *NewsfeedService) GetLikers(ctx context.Context, limit, offset int, userId, post_id string, isGuestUser bool) (any, error) {
+	if isGuestUser {
+		err := s.repo.CheckPublicPrivacyPermission(ctx, post_id)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err := s.repo.CheckFriendPrivacyPermission(ctx, userId, post_id)
+		if err != nil {
+			return nil, err
+		}
+	}
 	likers, err := s.repo.GetLikers(ctx, limit, offset, post_id)
 	if err != nil {
 		return nil, err
 	}
-	return &map[string]any{
-		"data":   likers,
-		"limit":  limit,
-		"offset": offset,
-	}, nil
+	return likers, nil
 }
 
 func (s *NewsfeedService) GetComments(ctx context.Context, limit, offset int, post_id string) (any, error) {

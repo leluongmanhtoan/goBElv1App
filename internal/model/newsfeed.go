@@ -41,7 +41,6 @@ type Post struct {
 	Deleted       int       `json:"deleted" bun:"deleted,type:tinyint,notnull"`
 	CreatedAt     time.Time `json:"createdAt" bun:"createdAt,type:timestamp,notnull,nullzero"`
 	UpdatedAt     time.Time `json:"updatedAt" bun:"updatedAt,type:timestamp,nullzero"`
-	Liked         bool      `json:"liked" bun:"liked,default:0"`
 }
 
 type NewsfeedPost struct {
@@ -102,6 +101,7 @@ type CommentPost struct {
 }
 
 type CommentInfo struct {
+	CommentId string    `json:"commentId" bun:"commentId"`
 	ProfileId string    `json:"profileId" bun:"profileId"`
 	FirstName string    `json:"firstname" bun:"firstname"`
 	Lastname  string    `json:"lastname" bun:"lastname"`

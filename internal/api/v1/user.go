@@ -2,12 +2,15 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"program/internal/middleware"
 	"program/internal/model"
 	"program/internal/response"
 	"program/internal/services"
 	"program/internal/validate"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,7 +33,7 @@ func NewUserAPI(engine *gin.Engine, userSerivce services.IUserService) {
 		Group.POST("auth/logout", handler.Logout)
 		Group.POST("auth/refresh", handler.RefeshToken)
 		Group.POST("auth/validate", middleware.AuthMdw.RequestAuthorization(), func(c *gin.Context) {
-			user_id, existed := c.Get("user_id")
+			user_id, existed := c.Get("userId")
 			if !existed {
 				c.JSON(response.BadRequest(errors.New("user_id not found")))
 				return
@@ -42,6 +45,7 @@ func NewUserAPI(engine *gin.Engine, userSerivce services.IUserService) {
 		Group.GET("user/profile", middleware.AuthMdw.RequestAuthorization(), handler.GetUserProfile)
 		Group.POST("user/profile", middleware.AuthMdw.RequestAuthorization(), handler.NewUserProfile)
 		Group.PATCH("user/profile", middleware.AuthMdw.RequestAuthorization(), handler.EditUserProfile)
+		Group.POST("user/profile/avatar", middleware.AuthMdw.RequestAuthorization(), handler.UploadAvatar)
 	}
 }
 
@@ -118,7 +122,7 @@ func (h *User) NewUserProfile(c *gin.Context) {
 	if !validate.ValidateRequest(c, &userProfilePost) {
 		return
 	}
-	user_id, existed := c.Get("user_id")
+	user_id, existed := c.Get("userId")
 	if !existed {
 		c.JSON(response.BadRequest(errors.New("user_id not found")))
 		return
@@ -135,9 +139,9 @@ func (h *User) NewUserProfile(c *gin.Context) {
 }
 
 func (h *User) EditUserProfile(c *gin.Context) {
-	user_id, existed := c.Get("user_id")
+	user_id, existed := c.Get("userId")
 	if !existed {
-		c.JSON(response.BadRequest(errors.New("user_id not found")))
+		c.JSON(response.BadRequest(errors.New("user id not found")))
 		return
 	}
 
@@ -156,9 +160,9 @@ func (h *User) EditUserProfile(c *gin.Context) {
 }
 
 func (h *User) GetUserProfile(c *gin.Context) {
-	user_id, existed := c.Get("user_id")
+	user_id, existed := c.Get("userId")
 	if !existed {
-		c.JSON(response.BadRequest(errors.New("user_id not found")))
+		c.JSON(response.BadRequest(errors.New("userid not found")))
 		return
 	}
 	userProfile, err := h.userService.GetUserProfile(c, user_id.(string))
@@ -168,4 +172,35 @@ func (h *User) GetUserProfile(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, userProfile)
 
+}
+
+func (h *User) UploadAvatar(c *gin.Context) {
+	user_id, existed := c.Get("userId")
+	if !existed {
+		c.JSON(response.BadRequest(errors.New("userid not found")))
+		return
+	}
+	file, err := c.FormFile("userAvatar")
+
+	if err != nil {
+		c.JSON(response.BadRequest(errors.New("can not get file from request")))
+		return
+	}
+
+	if file != nil {
+		mimeType := file.Header.Get("Content-Type")
+		if mimeType != "image/jpeg" && mimeType != "image/png" {
+			c.JSON(response.BadRequest(errors.New("invalid file type. Only JPEG and PNG allowed.")))
+			return
+		}
+	}
+	ext := filepath.Ext(file.Filename)
+	filename := fmt.Sprintf("avt_%s_%s%s", user_id, time.Now().Format("2006-01-02_15-04-05"), ext)
+	avtPath, err := h.userService.UploadAvatar(c, file, filename)
+	if err != nil {
+		c.JSON(response.ServiceUnavailableMsg(err.Error()))
+		return
+	}
+
+	response.SuccessResponse(c, "upload avatar successfully", avtPath)
 }
