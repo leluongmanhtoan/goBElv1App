@@ -68,10 +68,14 @@ func (s *NewsfeedService) PostComment(ctx context.Context, user_id, post_id stri
 }
 
 func (s *NewsfeedService) GetNewsfeed(ctx context.Context, limit, offset int, userId string) (any, error) {
+	cacheKey := fmt.Sprintf("newsfeed:user:%s", userId)
+
 	newsfeed, err := s.repo.GetNewsfeed(ctx, limit, offset, userId)
 	if err != nil {
 		return nil, err
 	}
+	s.repo.SaveNewsfeedCache(ctx, cacheKey, newsfeed)
+
 	return newsfeed, nil
 }
 

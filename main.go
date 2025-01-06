@@ -82,7 +82,7 @@ func main() {
 
 	userRepo := userRepo.NewUserRepo(mySqlConn)
 	relationshipsRepo := relationshipsRepo.NewRelationshipsRepo(mySqlConn)
-	newsfeedRepo := newsfeedRepo.NewNewsfeedRepo(mySqlConn)
+	newsfeedRepo := newsfeedRepo.NewNewsfeedRepo(mySqlConn, myRedisConn)
 
 	// Init service
 

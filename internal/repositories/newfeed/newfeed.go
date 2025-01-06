@@ -3,6 +3,7 @@ package newsfeedRepo
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"program/internal/database"
@@ -13,12 +14,14 @@ import (
 )
 
 type NewsfeedRepo struct {
-	db database.ISqlConnection
+	db  database.ISqlConnection
+	rdb database.IRedisConnection
 }
 
-func NewNewsfeedRepo(db database.ISqlConnection) INewsfeedRepo {
+func NewNewsfeedRepo(db database.ISqlConnection, rdb database.IRedisConnection) INewsfeedRepo {
 	return &NewsfeedRepo{
-		db: db,
+		db:  db,
+		rdb: rdb,
 	}
 }
 
@@ -323,6 +326,19 @@ func (r *NewsfeedRepo) PutComment(ctx context.Context, commentId string, content
 		return err
 	} else if affected, _ := resp.RowsAffected(); affected < 1 {
 		return errors.New("update comment failed")
+	}
+	return nil
+}
+
+// Cache Redis
+func (r *NewsfeedRepo) SaveNewsfeedCache(ctx context.Context, key string, newsfeed *[]model.NewsFeed) error {
+	data, err := json.Marshal(newsfeed)
+	if err != nil {
+		return err
+	}
+	_, err = r.rdb.GetDB().HSet(ctx, key, data).Result()
+	if err != nil {
+		return err
 	}
 	return nil
 }
